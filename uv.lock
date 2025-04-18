@@ -8,6 +8,19 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "akde"
+version = "1.0.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c8/2c/ebb69604857ff4c3749635a19748a455fa07ac3a5a313bedcd7c38e524bf/akde-1.0.2.tar.gz", hash = "sha256:ed6b9c15f46db9f2b6522a49912f379218e755c0369b9e37815157500db87f4c", size = 17598 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ee/41/33d32e907c9fca1e4f98a3639e01784c7418e638d853e455543c4b801526/akde-1.0.2-py3-none-any.whl", hash = "sha256:f373ef9da925261470b3a0c8592097b1fb1df821d0201925356729d77543660d", size = 11052 },
+]
+
+[[package]]
 name = "bleach"
 version = "6.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -720,6 +733,7 @@ name = "python-machine-learning-by-example-fourth-edition"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "akde" },
     { name = "jsonschema2md" },
     { name = "kaggle" },
     { name = "kagglehub" },
@@ -735,6 +749,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "akde", specifier = ">=1.0.2" },
     { name = "jsonschema2md", specifier = ">=1.5.2" },
     { name = "kaggle", specifier = ">=1.7.4.2" },
     { name = "kagglehub", specifier = ">=0.3.11" },
