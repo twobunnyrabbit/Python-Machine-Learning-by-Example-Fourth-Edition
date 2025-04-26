@@ -1,0 +1,256 @@
+---
+title: "Heart Disease"
+format: html
+---
+
+## Naives Bayes classification
+
+### Aim
+An attempt at using Naives Bayes for classification on the presence of heart disease in the `heart disease` dataset from UCI.
+
+### Code
+```{python}
+#| label: import packages and load dataset
+import numpy as np
+import pandas as pd
+# import matplotlib.pyplot as plt
+from pyhere import here
+from ucimlrepo import fetch_ucirepo 
+  
+# fetch dataset 
+heart_disease = fetch_ucirepo(id=45) 
+  
+# data (as pandas dataframes) 
+X = heart_disease.data.features 
+y = heart_disease.data.targets 
+
+```
+
+```{python}
+#| label: Count target levels
+#| 
+y.value_counts()
+```
+
+The target variable has 5 levels from 0 to 4 inclusive. This will be dichotomised to 0 - no disease, 1 disease.
+
+```{python}
+#| label: Raw target count and props
+#| 
+# <positron-console-cell-13>:1: SettingWithCopyWarning: 
+# A value is trying to be set on a copy of a slice from a DataFrame.
+# Try using .loc[row_indexer,col_indexer] = value instead
+
+# See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
+# above warning if using y["num"] = ....
+y.iloc[:, 0] = np.where(y["num"] == 0, 0, 1)
+y.value_counts().to_frame(name="count").assign(prop = lambda df: df["count"]/df["count"].sum())
+```
+
+After recoding, there are 164 (54.1%) with no disease and 139 (45.9%)with disease.
+
+
+Bin age into groups
+```{python}
+#| label: Describe age
+X['age'].describe()
+```
+
+```{python}
+#| label: Bin age into quartile
+
+
+# Create a new column 'age_quartile' by binning 'age' into 4 quantiles (quartiles)
+X['age_quartile'] = pd.qcut(X['age'], q=4, labels=False, duplicates='drop')
+
+# Display the first few rows with the new column
+print(X[['age', 'age_quartile']].head())
+
+# Show the value counts for the new quartile bins
+print("\nValue counts for age quartiles:")
+print(X['age_quartile'].value_counts())
+
+```
+
+
+```{python}
+#| label: Age quartile - normalised count
+X[["age_quartile"]].value_counts(normalize=True)
+```
+
+
+```{python}
+X.info()
+```
+
+
+```{python}
+# select the feature columns for a test
+X1 = X.loc[:, ["age_quartile", "sex" , "cp", "restecg"]]
+X1
+```
+
+Create the Naives Bayes classifier
+
+```{python}
+#| label: Create training and testing sets 
+from sklearn.model_selection import train_test_split
+from sklearn.naive_bayes import CategoricalNB
+from sklearn.metrics import accuracy_score, classification_report
+
+# Split the data
+X_train, X_test, y_train, y_test = train_test_split(X1, y, test_size=0.3, random_state=42)
+
+```
+
+```{python}
+#| label: Examine split 
+# Examine distribution of split
+# Assuming X_train, X_test, y_train, y_test are already defined
+dataframes = [X_train, X_test, y_train, y_test]
+
+# Using a functional style with map and lambda
+list(map(lambda df: print(f"{[k for k, v in globals().items() if v is df][0]}: {df.shape}"), dataframes))
+```
+
+
+```{python}
+#| label: Create Naives Bayes classifier
+# 2. Model Building and Training
+model = CategoricalNB()
+model.fit(X_train, y_train.to_numpy().ravel())  # ravel to avoid DataConversionWarning#| 
+```
+
+```{python}
+#| label: Predict and Evaluate
+# 3. Prediction and Evaluation
+y_pred = model.predict(X_test)
+accuracy = accuracy_score(y_test, y_pred)
+print(f"Accuracy: {accuracy}")
+print(classification_report(y_test, y_pred))#| 
+```
+
+
+```{python}
+#| label: Plot the predictions
+#| 
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+
+# Calculate the confusion matrix
+cm = confusion_matrix(y_test, y_pred)
+
+# Display the confusion matrix
+# Use model.classes_ to ensure the labels (0 and 1) are displayed correctly
+display_labels = ["No", "Yes"]
+disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=display_labels)
+disp.plot(cmap=plt.cm.Blues) # You can choose different color maps like 'viridis', 'plasma', etc.
+plt.title('Confusion Matrix')
+plt.show()
+```
+
+
+```{python}
+#| label: Tune the hyperparameters
+
+from sklearn.model_selection import StratifiedKFold
+k = 5
+k_fold = StratifiedKFold(n_splits=k, random_state=42, shuffle=True)
+
+smoothing_factor_option = [1, 2, 3, 4, 5, 6]
+fit_prior_option = [True, False]
+auc_record = {}
+
+for train_indices, test_indices in k_fold.split(X1, y):
+    X_train_k, X_test_k = X1[train_indices], X1[test_indices]
+    Y_train_k, Y_test_k = y[train_indices], y[test_indices]
+    for alpha in smoothing_factor_option:
+        if alpha not in auc_record:
+            auc_record[alpha] = {}
+        for fit_prior in fit_prior_option:
+            clf = CategoricalNB(alpha=alpha, fit_prior=fit_prior)
+            clf.fit(X_train_k, Y_train_k)
+            prediction_prob = clf.predict_proba(X_test_k)
+            pos_prob = prediction_prob[:, 1]
+            auc = roc_auc_score(Y_test_k, pos_prob)
+            auc_record[alpha][fit_prior] = auc + auc_record[alpha].get(fit_prior, 0.0)
+
+
+print('smoothing  fit prior  auc')
+for smoothing, smoothing_record in auc_record.items():
+    for fit_prior, auc in smoothing_record.items():
+        print(f'    {smoothing}        {fit_prior}    {auc/k:.5f}')
+
+```
+
+
+```{python}
+#| label: Tune the hyperparameters
+
+from sklearn.model_selection import StratifiedKFold
+from sklearn.naive_bayes import CategoricalNB # Use CategoricalNB
+from sklearn.metrics import roc_auc_score # Make sure roc_auc_score is imported
+import pprint # For pretty printing results
+
+k = 5
+k_fold = StratifiedKFold(n_splits=k, random_state=42, shuffle=True)
+
+# Hyperparameters for CategoricalNB
+smoothing_factor_option = [0.1, 0.5, 1.0, 2.0, 5.0] # Example values for alpha
+fit_prior_option = [True, False]
+auc_record = {}
+
+# Make sure X1 and y are your final feature and target DataFrames/Series
+# y should ideally be a pandas Series or 1D numpy array for compatibility
+y_array = y.to_numpy().ravel() # Convert y DataFrame to a 1D numpy array
+
+for train_indices, test_indices in k_fold.split(X1, y_array): # Split on X1 and y_array
+    # Use .iloc for positional indexing on the correct DataFrames/arrays
+    X_train_k, X_test_k = X1.iloc[train_indices], X1.iloc[test_indices]
+    y_train_k, y_test_k = y_array[train_indices], y_array[test_indices] # Index the numpy array
+
+    for alpha in smoothing_factor_option:
+        if alpha not in auc_record:
+            auc_record[alpha] = {}
+        for fit_prior in fit_prior_option:
+            # Use CategoricalNB
+            clf = CategoricalNB(alpha=alpha, fit_prior=fit_prior)
+            clf.fit(X_train_k, y_train_k) # Fit with the current fold's data
+            
+            # Check if predict_proba is available and handle cases if not (though CategoricalNB has it)
+            if hasattr(clf, "predict_proba"):
+                prediction_prob = clf.predict_proba(X_test_k)
+                pos_prob = prediction_prob[:, 1] # Probability of the positive class (usually class 1)
+                auc = roc_auc_score(y_test_k, pos_prob)
+                
+                # Accumulate AUC score
+                current_auc_sum = auc_record[alpha].get(fit_prior, 0.0)
+                auc_record[alpha][fit_prior] = current_auc_sum + auc
+            else:
+                # Handle cases where predict_proba might not be available (optional)
+                print(f"Warning: predict_proba not available for alpha={alpha}, fit_prior={fit_prior}. Skipping AUC calculation.")
+                auc_record[alpha][fit_prior] = auc_record[alpha].get(fit_prior, -k) # Mark as invalid maybe
+
+
+print("--- Cross-Validation AUC Results ---")
+pprint.pprint(auc_record) # Print the raw accumulated scores
+
+print("\n--- Average AUC per Hyperparameter Combination ---")
+print('alpha      fit_prior  avg_auc')
+print('--------------------------------')
+best_auc = -1
+best_params = {}
+
+for alpha, smoothing_record in auc_record.items():
+    for fit_prior, total_auc in smoothing_record.items():
+        avg_auc = total_auc / k
+        print(f'{alpha:<10} {str(fit_prior):<10} {avg_auc:.5f}')
+        if avg_auc > best_auc:
+            best_auc = avg_auc
+            best_params = {'alpha': alpha, 'fit_prior': fit_prior}
+
+print('--------------------------------')
+print(f"\nBest average AUC: {best_auc:.5f}")
+print(f"Best parameters: {best_params}")
+
+```
