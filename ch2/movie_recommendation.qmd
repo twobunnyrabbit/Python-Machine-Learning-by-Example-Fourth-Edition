@@ -1,0 +1,40 @@
+---
+title: "Movie Recommendation"
+format: html
+---
+
+```{python}
+#| label: Load package and data
+import numpy as np
+import pandas as pd
+from pyhere import here
+
+data_path = here('data', 'ch02', 'ml-1m/ratings.dat')
+df = pd.read_csv(data_path, header=None, sep='::', engine='python')
+df.columns = ['user_id', 'movie_id', 'rating', 'timestamp']
+print(df)
+```
+
+Trialling pivot to reshape the dataframe.
+
+
+```{python}
+# Using pivot() because Subject/Time combinations are unique
+data_wide_pivot = df.iloc[:, [0, 1, 2]].pivot(index='user_id', columns='movie_id', values='rating')
+
+print("\nWide Format (using pivot):")
+print(data_wide_pivot)
+
+```
+
+
+```{python}
+#| label: Replace NaN with 0
+
+data_wide_pivot.fillna(0, inplace=True)
+data_wide_pivot[['2858']]
+```
+
+```{python}
+data_wide_pivot[[2858]].value_counts()
+```
