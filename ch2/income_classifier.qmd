@@ -151,6 +151,9 @@ X = df.drop('income', axis=1)
 y = df['income']
 ```
 
+[Naive Bayes Classifier in Python](https://www.kaggle.com/code/prashant111/naive-bayes-classifier-in-python)
+8. Declare feature vector and target variable
+
 
 ## 3. Data Preprocessing and Train/Test Split
 
