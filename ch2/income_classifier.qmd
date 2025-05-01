@@ -151,9 +151,8 @@ X = df.drop('income', axis=1)
 y = df['income']
 ```
 
-[Naive Bayes Classifier in Python](https://www.kaggle.com/code/prashant111/naive-bayes-classifier-in-python)
-8. Declare feature vector and target variable
-
+`X` is a pandas dataframe.
+`y` is a pandas series.
 
 ## 3. Data Preprocessing and Train/Test Split
 
@@ -194,14 +193,66 @@ For the Iris dataset, these steps are minimal: no missing values, no categorical
 # Split data into training and testing sets
 # test_size: proportion of the dataset to include in the test split
 # random_state: ensures reproducibility
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42, stratify=y) # stratify=y is good for classification to maintain class distribution
+# X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42, stratify=y) # stratify=y is good for classification to maintain class distribution
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.3, random_state = 0)
 
 print(f"\nShape of training features (X_train): {X_train.shape}")
 print(f"Shape of training target (y_train): {y_train.shape}")
 print(f"Shape of testing features (X_test): {X_test.shape}")
 print(f"Shape of testing target (y_test): {y_test.shape}")
 ```
+### Feature engineering.
 
+Feature Engineering is the process of transforming raw data into useful features that help us to understand our model better and increase its predictive power.
+
+#### Categorical variables
+
+```{python}
+X_train_cats = [col for col in X_train.columns if X_train[col].dtypes == 'O' ]
+print(X_train_cats)
+```
+
+#### Numerical variables
+
+```{python}
+X_train_num = [col for col in X_train.columns if X_train[col].dtypes != 'O' ]
+print(X_train_num)
+```
+
+#### Are there missing variables in the training dataset?
+
+```{python}
+X_train[X_train_cats].isna().mean()
+```
+
+`workclass`, `occupation` and `native_country` has missing values.
+
+```{python}
+# impute missing categorical variables with most frequent value
+
+for df2 in [X_train, X_test]:
+    df2['workclass'].fillna(X_train['workclass'].mode()[0], inplace=True)
+    df2['occupation'].fillna(X_train['occupation'].mode()[0], inplace=True)
+    df2['native_country'].fillna(X_train['native_country'].mode()[0], inplace=True)    
+```
+
+```{python}
+# check missing values in categorical variables in X_train
+
+X_train[X_train_cats].isnull().sum()
+```
+
+#### Encoding categorical variables
+
+UPTO HERE
+[Naive Bayes Classifier in Python](https://www.kaggle.com/code/prashant111/naive-bayes-classifier-in-python)
+8. Declare feature vector and target variable
+
+
+```{python}
+X_train[X_train_cats].head()
+```
 ## 4. Model Selection, Training, and Evaluation
 
 Naive Bayes is a family of probabilistic classification algorithms based on Bayes' Theorem with the "naive" assumption of conditional independence between features given the class.
