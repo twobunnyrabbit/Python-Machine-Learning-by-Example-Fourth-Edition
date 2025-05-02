@@ -249,10 +249,50 @@ UPTO HERE
 [Naive Bayes Classifier in Python](https://www.kaggle.com/code/prashant111/naive-bayes-classifier-in-python)
 8. Declare feature vector and target variable
 
+```{python}
+# import category encoders
+
+import category_encoders as ce
+```
 
 ```{python}
-X_train[X_train_cats].head()
+# encode remaining variables with one-hot encoding
+
+encoder = ce.OneHotEncoder(cols=['workclass', 'education', 'marital_status', 'occupation', 'relationship', 
+                                 'race', 'sex', 'native_country'])
+
+X_train = encoder.fit_transform(X_train)
+
+X_test = encoder.transform(X_test)
 ```
+
+```{python}
+X_train.head()
+```
+
+#### Feature scaling
+
+```{python}
+cols = X_train.columns
+from sklearn.preprocessing import RobustScaler
+
+scaler = RobustScaler()
+
+X_train = scaler.fit_transform(X_train)
+
+X_test = scaler.transform(X_test)
+```
+
+```{python}
+X_train = pd.DataFrame(X_train, columns=[cols])
+X_test = pd.DataFrame(X_test, columns=[cols])
+```
+
+```{python}
+X_train.head()
+```
+
+
 ## 4. Model Selection, Training, and Evaluation
 
 Naive Bayes is a family of probabilistic classification algorithms based on Bayes' Theorem with the "naive" assumption of conditional independence between features given the class.
@@ -301,6 +341,7 @@ print("Model training complete.")
 
 # Predict on the test data
 y_pred = model.predict(X_test)
+y_pred
 ```
 
 ```{python}
@@ -318,6 +359,12 @@ conf_matrix = confusion_matrix(y_test, y_pred)
 print("\nConfusion Matrix:")
 print(conf_matrix)
 
+# print the scores on training and test set
+print('Check for verfitting and underfitting')
+print('Training set score: {:.4f}'.format(model.score(X_train, y_train)))
+
+print('Test set score: {:.4f}'.format(model.score(X_test, y_test)))
+
 # Optional: Visualize Confusion Matrix
 # plt.figure(figsize=(6, 4))
 # sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', xticklabels=iris.target_names, yticklabels=iris.target_names)
@@ -332,9 +379,34 @@ print(conf_matrix)
 # Recall (Sensitivity): Proportion of actual positives that were identified correctly (TP / (TP + FN))
 # F1-score: Harmonic mean of precision and recall (good for imbalanced classes)
 # Support: The number of actual occurrences of the class in the specified dataset (test set)
-class_report = classification_report(y_test, y_pred, target_names=iris.target_names)
-print("\nClassification Report:")
-print(class_report)
+# class_report = classification_report(y_test, y_pred, target_names=df.income)
+# print("\nClassification Report:")
+# print(class_report)
+```
+
+Check the null accuracy
+
+```{python}
+y_test.value_counts()
+null_accuracy = 7407 / (7407 + 2723)
+print(f'Null accuracy: {null_accuracy:.4f}')
+```
+
+
+Confusion matrix
+
+```{python}
+cm = confusion_matrix(y_test, y_pred)
+
+print('Confusion matrix\n\n', cm)
+
+print('\nTrue Positives(TP) = ', cm[0,0])
+
+print('\nTrue Negatives(TN) = ', cm[1,1])
+
+print('\nFalse Positives(FP) = ', cm[0,1])
+
+print('\nFalse Negatives(FN) = ', cm[1,0])
 ```
 
 ```{python}
