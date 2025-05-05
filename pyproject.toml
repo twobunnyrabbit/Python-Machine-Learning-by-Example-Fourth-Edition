@@ -6,12 +6,14 @@ readme = "README.md"
 requires-python = ">=3.10.17"
 dependencies = [
     "akde>=1.0.2",
+    "jinja2>=3.1.6",
     "jsonschema2md>=1.5.2",
     "kaggle>=1.7.4.2",
     "kagglehub>=0.3.11",
     "matplotlib>=3.10.1",
     "numpy>=2.2.4",
     "pandas>=2.2.3",
+    "plotly>=6.0.1",
     "plotnine>=0.14.5",
     "pyhere>=1.0.3",
     "scikit-learn>=1.6.1",
