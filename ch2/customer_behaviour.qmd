@@ -11,8 +11,16 @@ import numpy as np
 import pandas as pd
 from pyhere import here
 import matplotlib.pyplot as plt
+import itertools
 
 df = pd.read_csv(here('data/ch02/customer_behaviour/customer_behaviour.csv'))
+```
+
+```{python}
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.model_selection import train_test_split, KFold, cross_val_score
+from sklearn.naive_bayes import MultinomialNB
+from sklearn import metrics
 ```
 
 Download data manually from site:
@@ -170,6 +178,7 @@ df.info()
 ```
 
 ## More EDA
+### Checking distributions
 
 ```{python}
 # check distribution of EstimatedSalary (based on Purchased)
@@ -225,4 +234,365 @@ plt.xticks(np.arange(0,70,5))
 plt.xlim([10,70])
 plt.legend()
 plt.show()
+```
+
+### Univariate analysis
+
+
+```{python}
+df.describe().T
+```
+
+
+```{python}
+# count based on Purchased (countplot)
+fig, axes = plt.subplots(1,2,figsize=(10,4))
+
+sns.countplot(data=df, x='Purchased', ax=axes[0])
+for container in axes[0].containers:
+    axes[0].bar_label(container)
+
+# count based on Purchased (pie chart)
+slices = df.Purchased.value_counts().values
+activities = ['No Purchased (0)', 'Purchased (1)']
+axes[1].pie(slices, labels=activities, colors=['blue','orange'], shadow=True, explode=[0,0.05], autopct='%1.1f%%')
+
+plt.suptitle('Count of Purchased', y=1.09, **font)
+plt.show()
+```
+
+
+```{python}
+# count based on Gender (countplot)
+fig, axes = plt.subplots(1,2,figsize=(10,4))
+
+sns.countplot(data=df, x='Gender', ax=axes[0])
+for container in axes[0].containers:
+    axes[0].bar_label(container)
+
+# count based on Gender (pie chart)
+slices = df.Gender.value_counts().values
+activities = ['Female (1)', 'Male (0)']
+axes[1].pie(slices, labels=activities, colors=['blue','orange'], shadow=True, explode=[0,0.05], autopct='%1.1f%%')
+
+plt.suptitle('Count of Gender', y=1.09, **font)
+plt.show()
+```
+
+### Bivariate analysis
+
+
+```{python}
+# count of purchased based on Gender
+# %matplotlib inline
+ax = sns.countplot(data=df, x='Purchased', hue='Gender')
+for container in ax.containers:
+    ax.bar_label(container)
+plt.title('Count of Purchased (based on Gender)', fontdict=font, pad=15)
+plt.show()
+```
+
+
+```{python}
+# heatmap
+sns.heatmap(df.corr(), cmap='Reds', annot=True)
+plt.suptitle('Count of Purchased (based on Gender)', y=1.09, x=0.35, **font)
+plt.show()
+```
+
+
+```{python}
+# draw box plot of Estimated salary for male(0) or female(1) Gender
+# draw box plot of Estimated salary for no purchased(0) or purchased(1)
+for col in ['Gender', 'Purchased']:
+    sns.boxplot(data=df, x=col, y='EstimatedSalary')
+    plt.title(f'Box plot of EstimatedSalary for {col}', fontdict=font)
+    plt.show()
+```
+
+### Multivariate analysis
+
+```{python}
+# check feature correlation
+sns.scatterplot(data=df,x='Age', y='EstimatedSalary', hue='Purchased',)
+plt.title('Scatter plot of features', y=1.04, fontdict=font)
+plt.xticks(np.arange(15,65,5))
+plt.show()
+```
+
+
+```{python}
+import plotly.express as px
+import plotly.io as pio
+
+fig = px.scatter_3d(
+        data_frame=df,
+        x='Age',
+        y='EstimatedSalary',
+        z='Gender',
+        color='Purchased',
+        template='ggplot2',
+        opacity=0.6,
+        height=700,
+        title=f'3d scatter based on Age, EstimatedSalary, Gender and Purchased'
+)
+
+pio.show(fig)
+```
+
+
+```{python}
+# check mean of EstimatedSalary based on Gender and Purchased
+results = pd.pivot_table(data=df, index='Purchased', columns='Gender', values='EstimatedSalary')
+results.style.background_gradient(cmap='summer_r')
+```
+
+
+```{python}
+# show result in heatmap
+sns.heatmap(results, cmap='summer_r', annot=True)
+plt.suptitle('EstimatedSalary for Gender and Purchased', y=1.09, x=0.4, **font)
+plt.show()
+```
+
+
+```{python}
+# check mean of Age based on Gender and Purchased
+results = pd.pivot_table(data=df, index='Purchased', columns='Gender', values='Age')
+results.style.background_gradient(cmap='summer_r')
+```
+
+
+```{python}
+# show result in heatmap
+sns.heatmap(results, cmap='summer_r', annot=True)
+plt.suptitle('Age for Gender and Purchased', y=1.09, x=0.4, **font)
+plt.show()
+```
+
+## Model
+
+
+```{python}
+# standardize EstimatedSalary and Age with StandardScaler
+df2 = df.copy()
+scaler = MinMaxScaler(feature_range=(18,60)).fit(df[['EstimatedSalary']])
+df2['EstimatedSalary'] = scaler.transform(df2['EstimatedSalary'].values.reshape(-1,1))
+df2
+```
+
+
+```{python}
+# define x (features) and y (target)
+x = np.asanyarray(df2.drop('Purchased', axis=1))
+y = df2.Purchased.values.reshape(-1,1)
+```
+
+
+```{python}
+FPR1 = []
+TPR1 = []
+FPR0 = []
+TPR0 = []
+ACC_test = []
+ACC_train = []
+Recall = []
+Precision = []
+F1 = []
+
+def plot_confusion_matrix2(cm, classes,
+                          title='Confusion matrix',
+                          cmap=plt.cm.Blues):
+    """
+    This function plots the confusion matrix.
+        cm(array): confusion matrix
+        classes(dictionary): classes in our target
+    """
+    plt.figure(figsize=(10,7))
+    plt.grid(False)
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+
+    fmt ='d'
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, format(cm[i, j], fmt),
+                 horizontalalignment="center",
+                 color="white" if cm[i, j] > thresh else "black")
+
+    
+    plt.ylabel('Actual')
+    plt.xlabel('Predicted')
+    plt.tight_layout()
+    plt.show()
+
+# --------------------------------------------------------------------------------------
+
+def Perform_cross_val(model, k, x, y, scoring):
+    """
+    perform cross validation
+        model: logistic model
+        k(scaler): the value for n_splits in KFold()
+        x(DataFrame or array):  x_train
+        y(DataFrame or array): y_train
+        scoring(string): an approach for evaluation in cross validation
+    """
+
+    kf = KFold(n_splits=k)
+    cv_results = cross_val_score(model, x, y, cv=kf, scoring=scoring)
+    cv_mean = np.mean(cv_results)
+    print('-'*20, f"CV for k={k}, scoring={scoring}", '-'*20)
+    print(f"CV mean: {cv_mean}")
+    print(f"CV results: {cv_results}\n")
+
+# --------------------------------------------------------------------------------------
+
+def find_fold_index(k, x):
+    """
+    Find fold index in kfold
+        k(scaler): the value used for n_splits in KFold()
+        x(DataFrame or array): x_train
+    """
+
+    my_fold_index = []
+    j=1
+    for _ , test in KFold(k).split(x):
+
+        my_fold_index = []
+        for i in test:
+            my_fold_index.append(i)
+        print(f"fold {j}: [{my_fold_index[0]},{my_fold_index[-1]}]")
+        print(20*'-')
+        j += 1
+
+# --------------------------------------------------------------------------------------
+
+def plot_results(FPR0, TPR0, FPR1, TPR1, ACC_test, ACC_train, Recall, Precision, F1):
+    """
+    draw ROC curve and plot of Recall, precision, f1 score etc.
+        FPR0(list): list of False Positive Rate for class 0
+        TPR0(list): list of True Positive Rate for class 0
+        FPR1(list): list of Flase Positive Rate for class 1
+        TPR1(list): list of True Positive Rate for class 1
+        ACC(list): list of accuracy of models
+        Recall(list): list of recall score of models
+        Precision(list): list of Precision score of models
+        F1(list): list of F1 score of models 
+    """
+    fig, ax = plt.subplots(1,2,figsize=(10,4))
+    # plot model evaluation
+    ax[0].set_title('Model Evaluation Results', fontdict=font, y=1.02)
+    sns.lineplot(data=pd.DataFrame({'accoracy': ACC_test, 'Recall': Recall,
+                                    'Precision': Precision, 'F1 score': F1}), 
+                                    markers=True, ax=ax[0])
+    ax[0].set_xlabel('M')
+    ax[0].set_ylabel('Evaluation')
+    ax[0].legend(loc='upper center', bbox_to_anchor=(0.5, -0.12),
+          fancybox=True, shadow=True)
+
+    # plot model evaluation
+    ax[1].set_title('Model Accuracy Results for train and test', fontdict=font, y=1.02)
+    sns.lineplot(data=pd.DataFrame({'test accuracy': ACC_test, 'train accuracy': ACC_train}), 
+                                    markers=True, ax=ax[1])
+    ax[1].set_xlabel('M')
+    ax[1].set_ylabel('Accuracy')
+    ax[1].legend(loc='upper center', bbox_to_anchor=(0.5, -0.12),
+          fancybox=True, shadow=True)
+    plt.show()
+
+    # plot ROC curve for class 1
+    fig, ax = plt.subplots(1,2,figsize=(10,4))
+    i=1
+    ax[0].set_title('ROC Curve of Class 1', fontdict=font, y=1.02)
+    for fpr , tpr in zip(FPR1, TPR1):
+        ax[0].plot(fpr, tpr, label=f"ROC curve of model{i} (AUC = {round(metrics.auc(fpr, tpr),3)})")
+        i += 1
+        ax[0].set_xlabel('FPR')
+        ax[0].set_ylabel('TPR')
+    ax[0].legend(loc='upper center', bbox_to_anchor=(0.5, -0.12),
+          fancybox=True, shadow=True)
+        
+    # plot ROC curve for class zero
+    i=1
+    ax[1].set_title('ROC Curve of Class 0', fontdict=font, y=1.02)
+    for fpr , tpr in zip(FPR0, TPR0):
+        ax[1].plot(fpr, tpr, '--', label=f"ROC curve of model{i} (AUC = {round(metrics.auc(fpr, tpr),3)})")
+        i += 1
+        ax[1].set_xlabel('FPR')
+        ax[1].set_ylabel('TPR')
+    ax[1].legend(loc='upper center', bbox_to_anchor=(0.5, -0.12),
+        fancybox=True, shadow=True)
+    
+    plt.show()
+
+# --------------------------------------------------------------------------------------
+
+def modeling(x, y, test_size, classes, is_add=1 ):
+
+    # split data to train and test
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size, random_state=0)
+    print(20*'-', 'Shape', 20*'-')
+    print(f"x_train: {x_train.shape}")
+    print(f"y_train: {y_train.shape}")
+    print(f"x_test: {x_test.shape}")
+    print(f"y_test: {y_test.shape}")
+    
+
+
+    # define model and fit model
+    clf = MultinomialNB()
+    clf.fit(x_train, y_train.ravel())
+
+    # prediction and results
+    y_pred_train = clf.predict(x_train)
+    y_pred_test = clf.predict(x_test)
+    y_proba_train = clf.predict_proba(x_train)
+    y_proba_test = clf.predict_proba(x_test)
+
+    cm = metrics.confusion_matrix(y_test, y_pred_test)
+    fpr1, tpr1, _ = metrics.roc_curve(y_test, y_proba_test[:,1])
+    fpr0, tpr0, _ = metrics.roc_curve(y_test, y_proba_test[:,0])
+    acc_test = metrics.accuracy_score(y_test, y_pred_test)
+    acc_train = metrics.accuracy_score(y_train, y_pred_train)
+    rec = metrics.recall_score(y_test, y_pred_test)
+    pre = metrics.precision_score(y_test, y_pred_test)
+    f1 = metrics.f1_score(y_test, y_pred_test)
+
+    # append results
+    if is_add == 1:
+        FPR0.append(fpr0)
+        TPR0.append(tpr0)
+        FPR1.append(fpr1)
+        TPR1.append(tpr1)
+        ACC_test.append(acc_test)
+        ACC_train.append(acc_train)
+        Recall.append(rec)
+        Precision.append(pre)
+        F1.append(f1)
+
+    plot_results(FPR0, TPR0, FPR1, TPR1, ACC_test, ACC_train, Recall, Precision, F1)
+
+    # Evaluation model
+    print('-'*20 , 'Confusion Matrix', '-'*20)
+    print(cm)
+    plot_confusion_matrix2(cm, classes,
+                          title='Confusion matrix',
+                          cmap=plt.cm.Blues)
+    # or use plot_confusion_matrix from sklearn.metrics
+    print('-'*20 , 'Classification Report', '-'*20)
+    print(metrics.classification_report(y_test, y_pred_test, target_names=classes), '\n')
+    print(f"Jaccard Score: {metrics.jaccard_score(y_test, y_pred_test)}", '\n')
+
+    # print other result about predicted data
+    return clf, acc_test, acc_train
+```
+
+
+```{python}
+# Now create first model
+clf1, acc_test1, acc_train1 = modeling(x, y, 0.2, ['No Purchased=0', 'Purchased=1'])
 ```
