@@ -1,0 +1,192 @@
+---
+title: "Raisins"
+format: html
+---
+
+```{python}
+import pandas as pd
+from pyhere import here
+
+dataset = here('data', 'ch02', 'raisins', 'Raisin Dataset.xlsx')
+df = pd.read_excel(dataset)
+```
+
+```{python}
+df.head()
+```
+
+```{python}
+df.columns
+```
+
+
+```{python}
+df['Class']
+```
+
+
+```{python}
+X = df.iloc[:, :-1]
+y = df.iloc[:, -1]
+```
+
+
+```{python}
+from sklearn.model_selection import train_test_split
+
+# Assuming X and y are already defined as your features and target variable respectively
+# X = df.iloc[:, :-1]
+# y = df.iloc[:, -1]
+
+# Split the data into training and testing sets
+# test_size=0.2 means 20% of the data will be used for testing, and 80% for training
+# random_state is used for reproducibility, so you get the same split every time you run the code
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# You can then check the shapes of your new datasets
+print("Shape of X_train:", X_train.shape)
+print("Shape of X_test:", X_test.shape)
+print("Shape of y_train:", y_train.shape)
+print("Shape of y_test:", y_test.shape)
+```
+
+
+```{python}
+#| label: train-evaluate-gaussian-nb
+# Import necessary modules for Gaussian Naive Bayes and evaluation
+from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
+
+# 1. Initialize the Gaussian Naive Bayes model
+gnb_model = GaussianNB()
+
+# 2. Train the model using the training data
+print("Training the Gaussian Naive Bayes model...")
+gnb_model.fit(X_train, y_train)
+print("Model training complete.")
+
+# 3. Make predictions on the test data
+y_pred = gnb_model.predict(X_test)
+
+# 4. Evaluate the model
+print("\n--- Model Evaluation ---")
+
+# Accuracy
+accuracy = accuracy_score(y_test, y_pred)
+print(f"Accuracy on the test set: {accuracy:.4f}")
+
+# Classification Report
+# This will show precision, recall, and F1-score for each class
+print("\nClassification Report:")
+# Ensure target names are correctly identified if y contains string labels (which it does: 'Kecimen', 'Besni')
+# Scikit-learn handles string labels well in y_test and y_pred for classification_report
+# If y_test.unique() gives the class names in a specific order, you can use that.
+# Otherwise, classification_report will infer them.
+target_names = sorted(y.unique()) # Gets unique class names like ['Besni', 'Kecimen']
+print(classification_report(y_test, y_pred, target_names=target_names))
+
+# Confusion Matrix
+print("\nConfusion Matrix:")
+cm = confusion_matrix(y_test, y_pred, labels=target_names) # Use labels for consistent order
+# print(cm) # Raw matrix
+
+# Visualize Confusion Matrix
+disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=target_names)
+disp.plot(cmap=plt.cm.Blues)
+plt.title('Confusion Matrix for GaussianNB')
+plt.show()
+
+```
+
+
+```{python}
+#| label: normalize-features-rerun-gnb
+#| fig-cap: "Confusion Matrix for GaussianNB model trained on scaled features."
+
+from sklearn.preprocessing import StandardScaler
+# For MinMaxScaler (scales to a [0,1] range), you could use:
+# from sklearn.preprocessing import MinMaxScaler
+import pandas as pd # To reconstruct DataFrames after scaling
+# Note: matplotlib.pyplot as plt, accuracy_score, classification_report, 
+# confusion_matrix, ConfusionMatrixDisplay, GaussianNB were imported in the previous cell.
+# Variables X_train, X_test, y_train, y_test, target_names, and 'accuracy' (from unscaled model)
+# are also assumed to be available from the previous cell's execution.
+
+print("--- Normalizing Features and Re-running GaussianNB ---")
+
+# 1. Initialize the Scaler
+# StandardScaler standardizes features by removing the mean and scaling to unit variance.
+scaler = StandardScaler()
+# As an alternative, you could try MinMaxScaler:
+# scaler = MinMaxScaler()
+
+# 2. Fit the scaler on the original training data and transform both training and test data
+# It's crucial to fit the scaler ONLY on the training data to avoid data leakage.
+print("\nScaling features...")
+# X_train and X_test are pandas DataFrames from the previous split
+X_train_scaled_np = scaler.fit_transform(X_train)
+X_test_scaled_np = scaler.transform(X_test)
+
+# Convert scaled numpy arrays back to pandas DataFrames
+# This preserves column names and indices, which is good practice.
+X_train_scaled = pd.DataFrame(X_train_scaled_np, columns=X_train.columns, index=X_train.index)
+X_test_scaled = pd.DataFrame(X_test_scaled_np, columns=X_test.columns, index=X_test.index)
+
+print("Features scaled.")
+print("Shape of X_train_scaled:", X_train_scaled.shape)
+print("Shape of X_test_scaled:", X_test_scaled.shape)
+# print("\nFirst 5 rows of X_train_scaled (example):")
+# print(X_train_scaled.head())
+
+# 3. Initialize a new Gaussian Naive Bayes model for the scaled data
+gnb_model_scaled = GaussianNB()
+
+# 4. Train the model using the SCALED training data
+print("\nTraining the Gaussian Naive Bayes model on SCALED data...")
+gnb_model_scaled.fit(X_train_scaled, y_train)
+print("Model training complete.")
+
+# 5. Make predictions on the SCALED test data
+y_pred_scaled = gnb_model_scaled.predict(X_test_scaled)
+
+# 6. Evaluate the model on scaled data
+print("\n--- Model Evaluation on SCALED Data ---")
+
+# Accuracy
+accuracy_scaled = accuracy_score(y_test, y_pred_scaled)
+print(f"Accuracy on the test set (scaled data): {accuracy_scaled:.4f}")
+
+# Classification Report
+# 'target_names' should be available from the previous cell
+print("\nClassification Report (scaled data):")
+print(classification_report(y_test, y_pred_scaled, target_names=target_names))
+
+# Confusion Matrix
+print("\nConfusion Matrix (scaled data):")
+cm_scaled = confusion_matrix(y_test, y_pred_scaled, labels=target_names)
+
+# Visualize Confusion Matrix
+# Using a different colormap (e.g., Oranges) for visual distinction from the previous plot
+disp_scaled = ConfusionMatrixDisplay(confusion_matrix=cm_scaled, display_labels=target_names)
+disp_scaled.plot(cmap=plt.cm.Oranges)
+plt.title('Confusion Matrix for GaussianNB (Scaled Data)')
+plt.show()
+
+# 7. Compare with the original model's performance
+# 'accuracy' variable from the model trained on unscaled data should be in memory
+print("\n--- Performance Comparison ---")
+try:
+    print(f"Accuracy on original (unscaled) data: {accuracy:.4f}")
+    print(f"Accuracy on scaled data:               {accuracy_scaled:.4f}")
+    if accuracy_scaled > accuracy:
+        print("Scaling improved accuracy.")
+    elif accuracy_scaled < accuracy:
+        print("Scaling slightly decreased accuracy.")
+    else:
+        print("Scaling did not change accuracy significantly.")
+except NameError:
+    print("Variable 'accuracy' from the unscaled model run was not found. Please ensure the previous cell was executed.")
+
+
+```
