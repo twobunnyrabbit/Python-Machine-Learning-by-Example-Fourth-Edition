@@ -1,0 +1,306 @@
+---
+title: "Decision Tree Classification with scikit-learn"
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-location: right
+engine: jupyter
+---
+
+[Scikit-learn Decision Tree](https://scikit-learn.org/stable/modules/generated/sklearn.tree.DecisionTreeClassifier.html)
+
+
+```{python}
+from sklearn.tree import DecisionTreeClassifier
+
+X_train_n = [[6, 7],
+             [2, 4],
+             [7, 2],
+             [3, 6],
+             [4, 7],
+             [5, 2],
+             [1, 6],
+             [2, 0],
+             [6, 3],
+             [4, 1]]
+y_train_n = [0, 0, 0, 0, 0, 1, 1, 1, 1, 1]
+
+tree_sk = DecisionTreeClassifier(criterion='gini', max_depth=2, min_samples_split=2)
+
+tree_sk.fit(X_train_n, y_train_n)
+
+```
+
+
+```{python}
+from sklearn.tree import export_graphviz
+
+export_graphviz(tree_sk, out_file='tree.dot',
+                feature_names=['X1', 'X2'], impurity=False,
+                filled=True, class_names=['0', '1'])
+
+```
+
+Importing Click-Through Rate Prediction data
+
+The original uncompressed data is 6.2gb. I will import the 300,000 rows as per the instructions and save this locally in the `data` folder.
+
+
+```{python}
+import pandas as pd
+
+n_rows = 300000
+df = pd.read_csv("~/Downloads/train", nrows=n_rows)
+# df.to_csv("./data/cho03/click-rate-train.csv")
+df.head()
+```
+
+```{python}
+X = df.drop(['click', 'id', 'hour', 'device_id', 'device_ip'], axis=1).values
+Y = df['click'].values
+```
+
+::: {.callout-note collapse="true"}
+## Code Explanation
+
+1. The line `X = df.drop(['click', 'id', 'hour', 'device_id', 'device_ip'], axis=1).values` is working with a pandas DataFrame `df` that contains click-through rate prediction data.
+
+2. Breaking it down:
+   - `df.drop()` removes specified columns from the DataFrame
+   - The columns being dropped are: 'click', 'id', 'hour', 'device_id', and 'device_ip'
+   - `axis=1` specifies we're dropping columns (as opposed to rows with axis=0)
+
+3. The `.values` at the end converts the remaining DataFrame into a NumPy array. This is typically done because:
+   - Many scikit-learn machine learning algorithms expect input features as NumPy arrays
+   - NumPy arrays are more memory efficient than pandas DataFrames
+   - Array operations are generally faster than DataFrame operations
+
+4. The resulting `X` will contain all columns from the original DataFrame except the dropped ones, converted to a NumPy array format suitable for machine learning.
+
+5. Based on the context, this appears to be preparing the feature matrix for a decision tree classifier, where:
+   - The target variable 'click' is being excluded (it would be used as `y`)
+   - Other columns like 'id', 'hour', 'device_id', 'device_ip' are likely being dropped because they're either identifiers or not useful features
+:::
+
+```{python}
+n_train = int(n_rows * 0.9)
+X_train = X[:n_train]
+Y_train = Y[:n_train]
+X_test = X[n_train:]
+Y_test = Y[n_train:]
+
+```
+
+
+```{python}
+from sklearn.preprocessing import OneHotEncoder
+enc = OneHotEncoder(handle_unknown='ignore')
+
+```
+
+
+::: {.callout-note collapse="true"}
+## OneHotEncoder Explanation
+
+1. `from sklearn.preprocessing import OneHotEncoder` imports the OneHotEncoder class from scikit-learn's preprocessing module.
+
+2. `enc = OneHotEncoder(handle_unknown='ignore')` creates an instance of the OneHotEncoder with the following parameters:
+   - `handle_unknown='ignore'`: This parameter tells the encoder to ignore any unknown categories encountered during transformation (i.e., categories that weren't seen during fitting). This prevents errors when new categories appear in test data that weren't in training data.
+
+3. One-hot encoding is a technique used to convert categorical variables into a numerical format that machine learning algorithms can understand:
+   - It creates binary columns for each category in the original categorical feature
+   - Each binary column represents whether a particular category is present (1) or not (0)
+   - For example, if you have a "color" feature with values ["red", "green", "blue"], it would create three columns: "color_red", "color_green", "color_blue"
+
+4. This is particularly important for decision trees and other ML algorithms because:
+   - Most algorithms cannot directly process categorical string values
+   - One-hot encoding preserves all categorical information without imposing ordinal relationships
+   - It ensures that categorical features are treated equally by the model
+
+5. The encoder would typically be used with `.fit()` on training data and `.transform()` on both training and test data to convert categorical features into the appropriate numerical format.
+:::
+
+```{python}
+X_train_enc = enc.fit_transform(X_train)
+X_train_enc[0]
+print(X_train_enc[0])
+```
+
+::: {.callout-note collapse="true"}
+## fit_transform Explanation
+
+1. `X_train_enc = enc.fit_transform(X_train)` is a combined method that performs two operations in one step:
+   - `.fit()`: Learns the categories from the training data
+   - `.transform()`: Applies the one-hot encoding transformation to the training data
+
+2. Breaking down what happens during `.fit()`:
+   - The encoder analyzes the `X_train` data to identify all unique categories in each categorical feature
+   - It creates a mapping of each category to a binary column position
+   - This mapping is stored in the encoder object for later use
+
+3. Breaking down what happens during `.transform()`:
+   - The encoder converts each categorical value in `X_train` to its corresponding binary representation
+   - For each row, it creates binary columns where only the column corresponding to the actual category gets a value of 1, and all others get 0
+   - The result is typically returned as a sparse matrix (for memory efficiency) containing the encoded values
+
+4. Why use `.fit_transform()` instead of separate `.fit()` and `.transform()` calls:
+   - It's more efficient as it processes the data in a single pass
+   - It's the standard practice for training data preprocessing
+   - It ensures consistency between the fitting and transformation steps
+
+5. The result `X_train_enc` contains:
+   - The transformed training data in one-hot encoded format
+   - A sparse matrix (by default) that saves memory by only storing non-zero values
+   - The same number of rows as the original `X_train`, but with many more columns (one for each unique category across all features)
+
+6. This step is crucial for preparing categorical data for machine learning algorithms that require numerical input, ensuring that the model can properly interpret and learn from categorical features.
+:::
+
+Transform the testing set using the trained one-hot encoder as follows.
+
+```{python}
+X_test_enc = enc.transform(X_test)
+```
+
+GridSearchCV automates cross-validation and hyperparameter tuning, making the process easier and less repetitive than manual loops.
+
+```{python}
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import GridSearchCV
+
+parameters = {'max_depth': [3, 10, None]}
+decision_tree = DecisionTreeClassifier(criterion='gini',min_samples_split=30)
+grid_search = GridSearchCV(decision_tree, parameters, n_jobs=-1, cv=3, scoring='roc_auc')
+grid_search.fit(X_train_enc, Y_train)
+print(grid_search.best_params_)
+decision_tree_best = grid_search.best_estimator_
+pos_prob = decision_tree_best.predict_proba(X_test_enc)[:, 1]
+
+from sklearn.metrics import roc_auc_score
+
+print(f'The ROC AUC on testing set is: {roc_auc_score(Y_test, pos_prob):.3f}')
+```
+
+::: {.callout-note collapse="true"}
+## GridSearchCV Code Explanation
+
+1. **Import Statements**:
+   - `from sklearn.tree import DecisionTreeClassifier`: Imports the decision tree classifier
+   - `from sklearn.model_selection import GridSearchCV`: Imports the grid search cross-validation utility
+
+2. **Hyperparameter Definition**:
+   - `parameters = {'max_depth': [3, 10, None]}`: Defines the hyperparameter grid to search
+     - `max_depth=3`: A shallow tree with 3 levels
+     - `max_depth=10`: A moderately deep tree with 10 levels
+     - `max_depth=None`: An unlimited depth tree (can grow until all leaves are pure)
+
+3. **Base Model Initialization**:
+   - `decision_tree = DecisionTreeClassifier(criterion='gini', min_samples_split=30)`: Creates a base decision tree with:
+     - `criterion='gini'`: Uses Gini impurity for splitting
+     - `min_samples_split=30`: Requires at least 30 samples to split a node
+
+4. **Grid Search Setup**:
+   - `grid_search = GridSearchCV(decision_tree, parameters, n_jobs=-1, cv=3, scoring='roc_auc')`: Configures grid search with:
+     - `n_jobs=-1`: Uses all available CPU cores for parallel processing
+     - `cv=3`: 3-fold cross-validation
+     - `scoring='roc_auc'`: Optimizes for ROC AUC score
+
+5. **Model Training**:
+   - `grid_search.fit(X_train_enc, Y_train)`: Trains the model using the one-hot encoded training data
+   - `print(grid_search.best_params_)`: Displays the best hyperparameter combination found
+
+6. **Best Model Selection**:
+   - `decision_tree_best = grid_search.best_estimator_`: Retrieves the best model from the grid search
+
+7. **Prediction and Evaluation**:
+   - `pos_prob = decision_tree_best.predict_proba(X_test_enc)[:, 1]`: Gets positive class probabilities
+   - `roc_auc_score(Y_test, pos_prob)`: Calculates ROC AUC score on test data
+
+8. **Key Benefits**:
+   - Automatically finds optimal hyperparameters
+   - Uses cross-validation for robust evaluation
+   - Maximizes model performance on the chosen metric (ROC AUC)
+   - Ensures reproducible results
+:::
+
+## Ensembling decision trees - random forest
+
+
+```{python}
+from sklearn.ensemble import RandomForestClassifier
+
+random_forest = RandomForestClassifier(n_estimators=100, criterion='gini', min_samples_split=30, n_jobs=-1, random_state=42)
+
+# The parameters dictionary is re-used from the previous GridSearchCV
+grid_search_rf = GridSearchCV(random_forest, parameters, n_jobs=-1, cv=3, scoring='roc_auc')
+
+grid_search_rf.fit(X_train_enc, Y_train)
+
+print(grid_search_rf.best_params_)
+random_forest_best = grid_search_rf.best_estimator_
+pos_prob = random_forest_best.predict_proba(X_test_enc)[:, 1]
+print(f'The ROC AUC on testing set using random forest is: {roc_auc_score(Y_test, pos_prob):.3f}')
+
+```
+
+::: {.callout-note collapse="true"}
+## Random Forest Code Explanation
+
+1. **Import Statement**:
+   - `from sklearn.ensemble import RandomForestClassifier`: Imports the Random Forest classifier from scikit-learn's ensemble module
+
+2. **Random Forest Initialization**:
+   - `random_forest = RandomForestClassifier(n_estimators=100, criterion='gini', min_samples_split=30, n_jobs=-1)`: Creates a Random Forest model with:
+     - `n_estimators=100`: Builds 100 decision trees in the ensemble
+     - `criterion='gini'`: Uses Gini impurity for splitting nodes
+     - `min_samples_split=30`: Requires at least 30 samples to split a node
+     - `n_jobs=-1`: Uses all available CPU cores for parallel processing
+
+3. **Model Training with Grid Search**:
+   - `grid_search.fit(X_train_enc, Y_train)`: Trains the Random Forest using the existing GridSearchCV object
+   - Note: This reuses the same GridSearchCV object from the previous decision tree example
+
+4. **Best Parameters Display**:
+   - `print(grid_search.best_params_)`: Shows the optimal hyperparameters found by grid search
+
+5. **Best Model Selection**:
+   - `random_forest_best = grid_search.best_estimator_`: Retrieves the best Random Forest model from the grid search
+
+6. **Prediction**:
+   - `pos_prob = random_forest_best.predict_proba(X_test_enc)[:, 1]`: Gets the predicted probabilities for the positive class (class 1)
+
+7. **Model Evaluation**:
+   - `print(f'The ROC AUC on testing set using random forest is: {roc_auc_score(Y_test, pos_prob):.3f}')`: Calculates and displays the ROC AUC score
+
+8. **Key Concepts of Random Forest**:
+   - **Ensemble Learning**: Combines multiple decision trees to create a more robust model
+   - **Bagging**: Each tree is trained on a random subset of the training data (bootstrap sampling)
+   - **Feature Randomness**: Each split considers only a random subset of features, reducing correlation between trees
+   - **Voting Mechanism**: Final prediction is based on majority voting (classification) or averaging (regression) of all trees
+
+9. **Advantages over Single Decision Tree**:
+   - Reduces overfitting by averaging multiple trees
+   - Generally provides better accuracy and generalization
+   - More robust to noise and outliers
+   - Handles high-dimensional spaces better
+   - Provides feature importance estimates
+
+10. **Why Use Grid Search with Random Forest**:
+    - Automatically finds optimal hyperparameters like number of trees, max depth, etc.
+    - Ensures the best model configuration for the specific dataset
+    - Uses cross-validation for reliable performance estimation
+:::
+
+## Using XGBoost
+
+
+```{python}
+import xgboost as xgb
+
+model = xgb.XGBClassifier(learning_rate=0.1, max_depth=10, n_estimators=1000)
+model.fit(X_train_enc, Y_train)
+pos_prob = model.predict_proba(X_test_enc)[:, 1]
+print(f'The ROC AUC on testing set using GBT is: {roc_auc_score(Y_test, pos_prob):.3f}')
+
+```

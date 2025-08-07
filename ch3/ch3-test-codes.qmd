@@ -1,0 +1,604 @@
+---
+title: "Decision Tree Classification"
+format:
+  html:
+    embed-resources: true
+engine: jupyter
+---
+
+## Introduction
+
+This document demonstrates the calculation and visualization of Gini impurity, a metric used to measure the quality of a split in a decision tree. The code is converted from a Python script.
+
+## Visualizing Gini Impurity
+
+The following code calculates and plots the Gini impurity for a binary classification problem as the fraction of positive samples varies from 0 to 1.
+
+```{python}
+#| label: fig-gini
+#| fig-cap: "Gini Impurity for a binary class"
+import matplotlib.pyplot as plt
+import numpy as np
+
+pos_fraction = np.linspace(0.00, 1.00, 1000)
+gini = 1 - pos_fraction**2 - (1-pos_fraction)**2
+
+plt.plot(pos_fraction, gini)
+plt.ylim(0, 1)
+plt.xlabel('Positive fraction')
+plt.ylabel('Gini impurity')
+plt.show()
+```
+
+## Calculating Gini Impurity
+
+Here is a function to calculate Gini impurity for a given set of labels. We then apply it to a few example lists of labels.
+
+```{python}
+import numpy as np
+
+def gini_impurity(label):
+    # When the set is empty it is pure
+    if len(label) == 0:
+        return 0
+    # Count occurence of each label
+    counts = np.unique(label, return_counts=True)[1]
+    fractions = counts / float(len(label))
+    return 1 - np.sum(fractions**2)
+
+labels = [
+    [1, 1, 0, 1],
+    [1, 1, 0, 1, 0, 0],
+    [0, 0, 0, 0]
+]
+
+# The original script used a less-readable map/lambda combination.
+# This for-loop is more idiomatic and produces the same result.
+for label_list in labels:
+    print(gini_impurity(label_list))
+```
+
+![](images/image.png)
+
+-   • **3 / 5 (Group weight – males):** In the left table, 3 out of the 5 total rows hhave `User gender = M`, so males make up three-fifths of the whole sample.
+
+-   **2 / 3 (Clicked in male group):** Inside the male subset (3 rows), 2 rows hhave `Click = 1`; therefore two-thirds of males clicked.
+
+-   **1 / 3 (Not-clicked in male group):** The remaining 1 male row have `Click = 0`, so one-third of males did not click.
+
+-   **2 / 5 (Group weight – females):** The table shows 2 of 5 rows whave `User gender = F`, meaning females constitute two-fifths of the dataset.
+
+**1 / 2 (Clicked in female group):** Within the female subset (2 rows), 1 row have `Click = 1`; half of the females clicked.
+
+-   **1 / 2 (Not-clicked in female group):** The other female row have `Click = 0`, so half of the females did not click.
+
+Plugging these fractions into the Gini formula gives the impurity value 0.467 for the gender split.
+
+## Information gained
+
+$$
+\text{Entropy} = -\sum_{k=1}^{K} f_k \log_2 f_k
+$$
+
+-   measure of purity gained after splitting.
+-   entropy is a probablistic measure of uncertainty.
+-   the lower the entropy the purer the dataset.
+
+```{python}
+pos_fraction = np.linspace(0.001, 0.999, 1000)
+ent = - (pos_fraction * np.log2(pos_fraction) + (1 - pos_fraction) * np.log2(1 - pos_fraction))
+plt.plot(pos_fraction, ent)
+plt.xlabel('Positive fraction')
+plt.ylabel('Entropy')
+plt.ylim(0, 1)
+plt.show()
+
+```
+
+::: {.callout-note collapse="true"}
+#### Entropy: The Messy Toy Box
+
+Imagine you have a toy box.
+
+If your toy box has only red blocks, and you reach in to grab one, you know you'll get a red block. There's no surprise! This is low entropy. It's very neat and predictable.
+
+If your toy box has red blocks and blue blocks all mixed up, you don't know which color you'll grab. It's a surprise every time! This is high entropy. It's messy and unpredictable.
+
+So, entropy is just a fancy word for how messy and surprising something is.
+
+Information Gain: Getting Better at Guessing Let's go back to the messy toy box with red and blue blocks (high entropy).
+
+What if we sort them? We can ask a question like, "Is this block red?" and make two new piles: a "red" pile and a "blue" pile.
+
+Now, each of those new piles is very neat (low entropy). If you pick from the red pile, you know you'll get a red one.
+
+Information gain is how much we learned by sorting. We went from one messy box to two neat piles, so it's much less surprising now. By asking a good question, we "gained information" and made our toy piles tidier.
+
+In short:
+
+Entropy = How messy is it? Information Gain = How much tidier did it get after we sorted it?
+:::
+
+```{python}
+ def entropy(labels):
+     if len(labels) == 0:
+         return 0
+     counts = np.unique(labels, return_counts=True)[1]
+     fractions = counts / float(len(labels))
+     return - np.sum(fractions * np.log2(fractions))
+```
+
+```{python}
+print(f'{entropy([1, 1, 0, 1, 0]):.4f}')
+print(f'{entropy([1, 1, 0, 1, 0, 0]):.4f}')
+print(f'{entropy([1, 1, 1, 1]):.4f}')
+```
+
+```{python}
+criterion_function = {'gini': gini_impurity, 'entropy': entropy}
+def weighted_impurity(groups, criterion='gini'):
+    """
+    Calculate weighted impurity of children after a split
+    @param groups: list of children, and a child consists a
+                    list of class labels
+    @param criterion: metric to measure the quality of a split,
+                       'gini' for Gini impurity or 'entropy' for
+                           information gain
+    @return: float, weighted impurity
+    """
+    total = sum(len(group) for group in groups)
+    weighted_sum = 0.0
+    for group in groups:
+        weighted_sum += len(group) / float(total) * criterion_function[criterion](group)
+    return weighted_sum
+
+```
+
+```{python}
+children_1 = [[1, 0, 1], [0, 1]]
+children_2 = [[1, 1], [0, 0, 1]]
+print(f"Entropy of #1 split: {weighted_impurity(children_1, 'entropy'):.4f}")
+print(f"Entropy of #2 split: {weighted_impurity(children_2, 'entropy'):.4f}")
+
+```
+
+| User interest | User occupation | Click |
+|---------------|-----------------|-------|
+| Tech          | Professional    | 1     |
+| Fashion       | Student         | 0     |
+| Fashion       | Professional    | 0     |
+| Sports        | Student         | 0     |
+| Tech          | Student         | 1     |
+| Tech          | Retired         | 0     |
+| Sports        | Professional    | 1     |
+
+Split on `Tech`
+
+
+```{python}
+gini_results = {
+    'gini_interest_tech': weighted_impurity([[1, 1, 0], [0, 0, 0, 1]]),
+    'gini_interest_fashion': weighted_impurity([[0, 0], [1, 0, 1, 0, 1]]),
+    'gini_interest_sports': weighted_impurity([[0, 1], [1, 0, 0, 1, 0]]),
+    'gini_occupation_professional': weighted_impurity([[0, 0, 1, 0], [1, 0, 1]]),
+    'gini_occupation_student': weighted_impurity([[0, 0, 1, 0], [1, 0, 1]]),
+    'gini_occupation_retired': weighted_impurity([[1, 0, 0, 0, 1, 1], [1]])
+}
+```
+
+```{python}
+for k, v in sorted(gini_results.items(), key=lambda item: item[1], reverse=True):
+    print(f'{k}: {v}')
+```
+
+Root node for this is interest in fashion.
+
+Going down another level...
+
+
+```{python}
+gini_results = {
+    'interest_tech': weighted_impurity([[0, 1], [1, 1, 0]]),
+    'interest_sports': weighted_impurity([[1, 1, 0], [0, 1]]),
+    'occupation_professional': weighted_impurity([[0, 1, 0], [1,1]]),
+    'occupation_student': weighted_impurity([[1, 0, 1], [0, 1]]),
+    'occupation_retired': weighted_impurity([[1, 0, 1, 1], [0]])
+}
+
+for k, v in sorted(gini_results.items(), key=lambda item: item[1], reverse=True):
+    print(f'{k}: {v}')
+```
+
+The next split is on occupation professional.
+
+Defining a utility function to split a node into left and right children based on a feature and a value:
+
+```{python}
+def split_node(X, y, index, value):
+    """
+    Split a node in a decision tree based on a feature and threshold value.
+    
+    Parameters:
+    -----------
+    X : numpy.ndarray
+        Feature matrix of shape (n_samples, n_features)
+    y : numpy.ndarray
+        Target vector of shape (n_samples,)
+    index : int
+        Index of the feature to split on
+    value : int, float or str
+        Threshold value for numerical features or category for categorical features
+        
+    Returns:
+    --------
+    tuple
+        A tuple containing two lists (left, right), where each list contains:
+        - The subset of X for that child node
+        - The corresponding subset of y
+        
+    Notes:
+    ------
+    - For numerical features (integer or float), splits samples where feature >= value
+    - For categorical features, splits samples where feature == value
+    """
+    x_index = X[:, index]
+    # if this feature is numerical
+    if X[0, index].dtype.kind in ['i', 'f']:
+        mask = x_index >= value
+    # if this feature is categorical
+    else:
+        mask = x_index == value
+    # split into left and right child
+    left = [X[~mask, :], y[~mask]]
+    right = [X[mask, :], y[mask]]
+    return left, right
+```
+
+
+Define the greedy search function, which tries out all possible splits and returns the best one given a selection criterion, along with the resulting children:
+
+```{python}
+def get_best_split(X, y, criterion):
+    """
+    Find the best split for a decision tree node by evaluating all possible splits.
+    
+    Parameters:
+    -----------
+    X : numpy.ndarray
+        Feature matrix of shape (n_samples, n_features)
+    y : numpy.ndarray
+        Target vector of shape (n_samples,)
+    criterion : str
+        Splitting criterion ('gini' or 'entropy')
+        
+    Returns:
+    --------
+    dict
+        A dictionary containing:
+        - 'index': Index of best feature to split on
+        - 'value': Best threshold/category value for the split
+        - 'children': Resulting child nodes from the best split
+        
+    Notes:
+    ------
+    - Evaluates all features and all unique values for each feature
+    - Returns the split with the lowest weighted impurity
+    """
+    best_index, best_value, best_score, children = None, None, 1, None
+    for index in range(len(X[0])):
+        for value in np.sort(np.unique(X[:, index])):
+            groups = split_node(X, y, index, value)
+            impurity = weighted_impurity([groups[0][1], groups[1][1]], criterion)
+            if impurity < best_score:
+                best_index, best_value, best_score, children = index, value, impurity, groups
+    return {'index': best_index, 'value': best_value, 'children': children}
+```
+
+```{python}
+def get_leaf(labels):
+    """
+    Determine the leaf node value by majority vote of labels.
+    
+    Parameters:
+    -----------
+    labels : numpy.ndarray
+        Array of class labels for samples in the leaf node
+        
+    Returns:
+    --------
+    int
+        The most frequent class label in the leaf node
+        
+    Notes:
+    ------
+    - Uses numpy's bincount to count occurrences of each label
+    - Returns the label with highest count (majority class)
+    - In case of ties, returns the smallest label value
+    """
+    return np.bincount(labels).argmax()
+```
+
+The recursive function links all of them together:
+
+```{python}
+def split(node, max_depth, min_size, depth, criterion):
+    """
+    Recursively split a decision tree node to build the tree structure.
+    
+    Parameters:
+    -----------
+    node : dict
+        Current node containing 'children' to split
+    max_depth : int
+        Maximum depth of the tree
+    min_size : int
+        Minimum number of samples required to split a node
+    depth : int
+        Current depth in the tree
+    criterion : str
+        Splitting criterion ('gini' or 'entropy')
+        
+    Notes:
+    ------
+    - Modifies the node in-place by adding 'left' and 'right' children
+    - Handles cases where child nodes are empty
+    - Stops recursion when max_depth is reached or min_size is not met
+    - Uses get_best_split() to find optimal splits
+    - Uses get_leaf() to create leaf nodes when needed
+    """
+    left, right = node['children']
+    del (node['children'])
+    
+    if left[1].size == 0:
+        node['right'] = get_leaf(right[1])
+        return
+    if right[1].size == 0:
+        node['left'] = get_leaf(left[1])
+        return
+        
+    # Check if the current depth exceeds the maximal depth
+    if depth >= max_depth:
+        node['left'], node['right'] = get_leaf(left[1]), get_leaf(right[1])
+        return
+        
+    # Process left child
+    if left[1].size <= min_size:
+        node['left'] = get_leaf(left[1])
+    else:
+        result = get_best_split(left[0], left[1], criterion)
+        result_left, result_right = result['children']
+        if result_left[1].size == 0:
+            node['left'] = get_leaf(result_right[1])
+        elif result_right[1].size == 0:
+            node['left'] = get_leaf(result_left[1])
+        else:
+            node['left'] = result
+            split(node['left'], max_depth, min_size, depth + 1, criterion)
+            
+    # Process right child
+    if right[1].size <= min_size:
+        node['right'] = get_leaf(right[1])
+    else:
+        result = get_best_split(right[0], right[1], criterion)
+        result_left, result_right = result['children']
+        if result_left[1].size == 0:
+            node['right'] = get_leaf(result_right[1])
+        elif result_right[1].size == 0:
+            node['right'] = get_leaf(result_left[1])
+        else:
+            node['right'] = result
+            split(node['right'], max_depth, min_size, depth + 1, criterion)
+
+```
+
+
+Entry point of the tree’s construction 
+
+```{python}
+def train_tree(X_train, y_train, max_depth, min_size, criterion='gini'):
+    """
+    Train a decision tree classifier from the training data.
+    
+    Parameters:
+    -----------
+    X_train : array-like
+        Training feature matrix of shape (n_samples, n_features)
+    y_train : array-like
+        Training target vector of shape (n_samples,)
+    max_depth : int
+        Maximum depth of the tree
+    min_size : int
+        Minimum number of samples required to split a node
+    criterion : str, optional
+        Splitting criterion ('gini' or 'entropy'), default='gini'
+        
+    Returns:
+    --------
+    dict
+        The root node of the trained decision tree
+        
+    Notes:
+    ------
+    - Converts input to numpy arrays for processing
+    - Uses get_best_split() to find the initial split
+    - Uses split() to recursively build the tree structure
+    - Returns the root node containing the complete tree structure
+    """
+    X = np.array(X_train)
+    y = np.array(y_train)
+    root = get_best_split(X, y, criterion)
+    split(root, max_depth, min_size, 1, criterion)
+    return root
+```
+
+
+Test this.
+
+```{python}
+X_train = [['tech', 'professional'],
+            ['fashion', 'student'],
+            ['fashion', 'professional'],
+            ['sports', 'student'],
+            ['tech', 'student'],
+            ['tech', 'retired'],
+            ['sports', 'professional']]
+y_train = [1, 0, 0, 0, 1, 0, 1]
+tree = train_tree(X_train, y_train, 2, 2)
+```
+
+To verify that the resulting tree from the model is identical to what we constructed by hand, we write a function displaying the tree:
+
+```{python}
+CONDITION = {'numerical': {'yes': '>=', 'no': '<'},
+             'categorical': {'yes': 'is', 'no': 'is not'}}
+def visualize_tree(node, depth=0):
+    """
+    Recursively visualize a decision tree structure in text format.
+    
+    Parameters:
+    -----------
+    node : dict or int
+        Current node to visualize (either internal node or leaf)
+    depth : int, optional
+        Current depth in the tree (used for indentation), default=0
+        
+    Notes:
+    ------
+    - For internal nodes (dict), prints the splitting condition
+    - For leaf nodes (int), prints the predicted class
+    - Uses CONDITION dictionary to format numerical vs categorical splits
+    - Indents output based on tree depth for hierarchical visualization
+    - Prints both left and right branches with appropriate conditions
+    
+    Example Output:
+    |- X1 is not sports
+      |- X2 is not student
+        [1]
+      |- X2 is student
+        [0]
+    |- X1 is sports
+      [1]
+    """
+    if isinstance(node, dict):
+        if node['value'].dtype.kind in ['i', 'f']:
+            condition = CONDITION['numerical']
+        else:
+            condition = CONDITION['categorical']
+        print('{}|- X{} {} {}'.format(depth * '  ',
+            node['index'] + 1, condition['no'], node['value']))
+        if 'left' in node:
+            visualize_tree(node['left'], depth + 1)
+        print('{}|- X{} {} {}'.format(depth * '  ',
+            node['index'] + 1, condition['yes'], node['value']))
+        if 'right' in node:
+            visualize_tree(node['right'], depth + 1)
+    else:
+        print(f"{depth * '  '}[{node}]")
+visualize_tree(tree)
+```
+
+Test it with a numerical example:
+
+```{python}
+X_train_n = [[6, 7],
+             [2, 4],
+             [7, 2],
+             [3, 6],
+             [4, 7],
+             [5, 2],
+             [1, 6],
+             [2, 0],
+             [6, 3],
+             [4, 1]]
+y_train_n = [0, 0, 0, 0, 0, 1, 1, 1, 1, 1]
+tree = train_tree(X_train_n, y_train_n, 2, 2)
+visualize_tree(tree)
+```
+
+
+## Decision Tree Implementation Summary
+
+The manual decision tree implementation consists of several key components:
+
+1. **Impurity Measurement**:
+   - `gini_impurity()` calculates Gini impurity for node purity assessment
+   - `entropy()` calculates information entropy (alternative impurity measure)
+   - `weighted_impurity()` computes weighted impurity for child nodes
+
+2. **Tree Building Components**:
+   - `split_node()`: Splits data on a feature value (handles both numerical and categorical)
+   - `get_best_split()`: Evaluates all possible splits to find the one with lowest impurity
+   - `get_leaf()`: Creates leaf nodes using majority class voting
+
+3. **Recursive Tree Construction**:
+   - `split()`: Recursively builds the tree structure with stopping conditions:
+     * Maximum depth reached
+     * Minimum samples per node not met
+     * Node becomes pure (single class)
+   - `train_tree()`: Entry point that initializes the tree building process
+
+4. **Visualization**:
+   - `visualize_tree()`: Displays the tree structure with proper indentation
+   - Handles both numerical (>=, <) and categorical (is, is not) conditions
+
+### Example Usage:
+```python
+# Categorical data example
+X_train = [['tech','professional'], ['fashion','student'], ...]
+y_train = [1, 0, ...] 
+tree = train_tree(X_train, y_train, max_depth=2, min_size=2)
+visualize_tree(tree)
+
+# Numerical data example  
+X_train_n = [[6,7], [2,4], ...]
+y_train_n = [0, 0, ...]
+tree = train_tree(X_train_n, y_train_n, max_depth=2, min_size=2)
+visualize_tree(tree)
+```
+### Decision Tree Theory Overview:
+
+1. Basic Concept:
+- Decision trees are supervised learning algorithms for classification and regression
+- They learn simple decision rules from data features to predict target values
+- Model structure resembles an inverted tree with root node, internal nodes, and leaves
+
+2. Key Components:
+- Nodes: Represent features/attributes
+- Branches: Represent decision rules (splits)
+- Leaves: Represent final outcomes (class labels or continuous values)
+
+3. Splitting Criteria:
+- Classification: Typically uses Gini Impurity or Information Gain (Entropy)
+- Regression: Typically uses variance reduction or MSE minimization
+
+4. Advantages:
+- Easy to interpret and visualize
+- Handle both numerical and categorical data
+- Require little data preprocessing
+- Can model non-linear relationships
+
+5. Limitations:
+- Prone to overfitting (solved via pruning, max_depth)
+- Sensitive to small data changes (unstable)
+- Can create biased trees with imbalanced data
+
+6. Mathematical Foundations:
+- Gini Impurity: G = 1 - Σ(p_i²) where p_i is probability of class i
+- Information Gain: IG = H(parent) - Σ(N_child/N * H(child))
+  where H is entropy: H = -Σ(p_i * log2(p_i))
+
+7. Practical Considerations:
+- Important hyperparameters: max_depth, min_samples_split, min_samples_leaf
+- Ensemble methods (Random Forests, XGBoost) often outperform single trees
+- Feature importance can be derived from splits
+
+The implementation in this file demonstrates these concepts through:
+- Manual calculation of Gini impurity and entropy
+- Recursive tree building with configurable stopping criteria
+- Visualization of the decision boundaries
+
+
+**Up to:**
+> Figure 3.10: Further partitioning of the data according to "Is occupation professional?"
+> 
+> We can repeat the splitting process as long as the tree does not exceed the maximum depth and the node contains enough samples.
