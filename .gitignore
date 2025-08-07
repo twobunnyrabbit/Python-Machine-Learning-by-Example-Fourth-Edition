@@ -2,4 +2,7 @@
 .DS_Store
 .python-version
 *.zip
+*.html
+*.png
+*.dot
 data/
