@@ -7,3 +7,4 @@
 *.dot
 data/
 .env
+model_cache/

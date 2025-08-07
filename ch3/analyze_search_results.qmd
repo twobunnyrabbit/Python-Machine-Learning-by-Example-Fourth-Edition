@@ -1,0 +1,280 @@
+---
+title: "Analyze Hyperparameter Search Results"
+format: html
+self-contained: true
+---
+
+This notebook analyzes the results from the hyperparameter search script.
+
+## Load Cached Results
+
+```{python}
+# Setup
+import pandas as pd
+import sys
+import os
+from pathlib import Path
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+
+# Add repository root to Python path
+repo_root = Path.cwd()
+while repo_root != repo_root.parent:
+    if (repo_root / 'config.py').exists():
+        break
+    repo_root = repo_root.parent
+sys.path.insert(0, str(repo_root))
+
+from config import get_click_rate_file
+from model_cache import ModelCache
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, classification_report, confusion_matrix
+from sklearn.model_selection import train_test_split
+
+# Initialize cache
+cache = ModelCache()
+print("📋 Available cached models:")
+cache.list_cached_models()
+```
+
+```{python}
+# Load the best models from cache
+grid_search = None
+random_search = None
+
+# Try to load GridSearch results
+try:
+    grid_params = {
+        'estimator': 'DecisionTreeClassifier',
+        'param_grid': {
+            'max_depth': [5, 7, 10, 15, 20, None],
+            'min_samples_split': [2, 5, 10, 20, 50],
+            'min_samples_leaf': [1, 2, 4, 8, 16],
+            'criterion': ['gini', 'entropy'],
+            'max_features': ['sqrt', 'log2', None]
+        },
+        'cv': 5,
+        'scoring': 'f1',
+        'estimator_params': {'random_state': 42}
+    }
+    grid_search = cache.load_search_result("decision_tree_comprehensive_grid", grid_params)
+except Exception as e:
+    print(f"Could not load grid search: {e}")
+
+# Try to load RandomizedSearch results  
+try:
+    random_params = {
+        'estimator': 'DecisionTreeClassifier',
+        'param_distributions': {
+            'max_depth': [3, 5, 7, 10, 15, 20, 25, None],
+            'min_samples_split': list(range(2, 101, 2)),
+            'min_samples_leaf': list(range(1, 51)),
+            'criterion': ['gini', 'entropy'],
+            'max_features': ['sqrt', 'log2', None],
+            'splitter': ['best', 'random']
+        },
+        'n_iter': 200,
+        'cv': 5,
+        'scoring': 'f1',
+        'random_state': 42
+    }
+    random_search = cache.load_search_result("decision_tree_comprehensive_random", random_params)
+except Exception as e:
+    print(f"Could not load random search: {e}")
+
+print(f"GridSearchCV loaded: {'✅' if grid_search else '❌'}")
+print(f"RandomizedSearchCV loaded: {'✅' if random_search else '❌'}")
+```
+
+```{python}
+# Prepare test data (same as in script)
+data_path = get_click_rate_file('click-rate-train.csv')
+df = pd.read_csv(data_path)
+
+features_to_drop = ['click', 'id', 'hour', 'device_id', 'device_ip']
+X = df.drop(columns=features_to_drop)
+y = df['click']
+X = pd.get_dummies(X, drop_first=True)
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y)
+
+print(f"Test data shape: {X_test.shape}")
+```
+
+## Compare Search Methods
+
+```{python}
+# Compare the two search methods
+if grid_search and random_search:
+    print("🔍 Hyperparameter Search Comparison:")
+    print("=" * 50)
+    
+    print(f"GridSearchCV:")
+    print(f"  Best CV F1 Score: {grid_search.best_score_:.4f}")
+    print(f"  Best Parameters:  {grid_search.best_params_}")
+    
+    print(f"\nRandomizedSearchCV:")
+    print(f"  Best CV F1 Score: {random_search.best_score_:.4f}")
+    print(f"  Best Parameters:  {random_search.best_params_}")
+    
+    # Test set evaluation
+    grid_pred = grid_search.best_estimator_.predict(X_test)
+    grid_proba = grid_search.best_estimator_.predict_proba(X_test)[:, 1]
+    
+    random_pred = random_search.best_estimator_.predict(X_test)
+    random_proba = random_search.best_estimator_.predict_proba(X_test)[:, 1]
+    
+    print(f"\nTest Set Performance:")
+    print(f"GridSearchCV - F1: {f1_score(y_test, grid_pred):.4f}, ROC-AUC: {roc_auc_score(y_test, grid_proba):.4f}")
+    print(f"RandomizedSearchCV - F1: {f1_score(y_test, random_pred):.4f}, ROC-AUC: {roc_auc_score(y_test, random_proba):.4f}")
+```
+
+## Detailed Analysis of Best Model
+
+```{python}
+# Choose the best performing model
+best_search = None
+best_name = ""
+
+if grid_search and random_search:
+    grid_f1 = f1_score(y_test, grid_search.best_estimator_.predict(X_test))
+    random_f1 = f1_score(y_test, random_search.best_estimator_.predict(X_test))
+    
+    if grid_f1 >= random_f1:
+        best_search = grid_search
+        best_name = "GridSearchCV"
+    else:
+        best_search = random_search
+        best_name = "RandomizedSearchCV"
+elif grid_search:
+    best_search = grid_search
+    best_name = "GridSearchCV"
+elif random_search:
+    best_search = random_search
+    best_name = "RandomizedSearchCV"
+
+if best_search:
+    print(f"🏆 Best Model: {best_name}")
+    print(f"Cross-validation F1 Score: {best_search.best_score_:.4f}")
+    print(f"Best Parameters: {best_search.best_params_}")
+    
+    best_model = best_search.best_estimator_
+```
+
+## Model Evaluation
+
+```{python}
+if best_search:
+    # Detailed evaluation
+    y_pred = best_model.predict(X_test)
+    y_pred_proba = best_model.predict_proba(X_test)[:, 1]
+    
+    print("📊 Comprehensive Model Evaluation:")
+    print("=" * 40)
+    
+    metrics = {
+        'Accuracy': accuracy_score(y_test, y_pred),
+        'Precision': precision_score(y_test, y_pred),
+        'Recall': recall_score(y_test, y_pred),
+        'F1 Score': f1_score(y_test, y_pred),
+        'ROC AUC': roc_auc_score(y_test, y_pred_proba)
+    }
+    
+    for metric, value in metrics.items():
+        print(f"{metric:>12}: {value:.4f}")
+    
+    print(f"\nClassification Report:")
+    print(classification_report(y_test, y_pred))
+```
+
+## Visualizations
+
+```{python}
+if best_search:
+    # Confusion Matrix
+    cm = confusion_matrix(y_test, y_pred)
+    
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=['No Click', 'Click'],
+                yticklabels=['No Click', 'Click'])
+    plt.title(f'Confusion Matrix - {best_name}')
+    plt.ylabel('Actual')
+    plt.xlabel('Predicted')
+    plt.tight_layout()
+    plt.show()
+```
+
+```{python}
+if best_search:
+    # Feature Importance
+    feature_importance = pd.DataFrame({
+        'feature': X.columns,
+        'importance': best_model.feature_importances_
+    }).sort_values('importance', ascending=False)
+    
+    print("🔍 Top 15 Most Important Features:")
+    print(feature_importance.head(15))
+    
+    # Plot feature importance
+    plt.figure(figsize=(12, 8))
+    top_features = feature_importance.head(15)
+    plt.barh(range(len(top_features)), top_features['importance'])
+    plt.yticks(range(len(top_features)), top_features['feature'])
+    plt.xlabel('Feature Importance')
+    plt.title(f'Top 15 Most Important Features - {best_name}')
+    plt.gca().invert_yaxis()
+    plt.tight_layout()
+    plt.show()
+```
+
+## Search Results Analysis
+
+```{python}
+if best_search:
+    # Analyze CV results if available
+    if hasattr(best_search, 'cv_results_'):
+        cv_results = pd.DataFrame(best_search.cv_results_)
+        
+        print("📈 Search Performance Analysis:")
+        print(f"Total parameter combinations tested: {len(cv_results)}")
+        print(f"Best rank: {cv_results[cv_results['rank_test_score'] == 1].index[0] + 1}")
+        
+        # Show top 10 parameter combinations
+        top_results = cv_results.nsmallest(10, 'rank_test_score')[
+            ['rank_test_score', 'mean_test_score', 'std_test_score', 'params']
+        ]
+        
+        print(f"\nTop 10 Parameter Combinations:")
+        for idx, row in top_results.iterrows():
+            print(f"Rank {row['rank_test_score']:2d}: F1={row['mean_test_score']:.4f} (±{row['std_test_score']:.4f}) - {row['params']}")
+```
+
+## Model Insights
+
+```{python}
+if best_search:
+    # Training vs Test performance
+    train_pred = best_model.predict(X_train)
+    train_f1 = f1_score(y_train, train_pred)
+    test_f1 = f1_score(y_test, y_pred)
+    
+    print("🎯 Model Generalization Analysis:")
+    print("=" * 35)
+    print(f"Training F1 Score:   {train_f1:.4f}")
+    print(f"Test F1 Score:       {test_f1:.4f}")
+    print(f"Generalization Gap:  {train_f1 - test_f1:.4f}")
+    
+    if train_f1 - test_f1 > 0.05:
+        print("⚠️  Model may be overfitting (large gap between train/test)")
+    else:
+        print("✅ Model shows good generalization")
+    
+    # Model complexity
+    print(f"\nModel Complexity:")
+    print(f"Tree Depth:          {best_model.tree_.max_depth}")
+    print(f"Number of Leaves:    {best_model.tree_.n_leaves}")
+    print(f"Number of Features:  {X.shape[1]}")
+```
+
+This analysis notebook lets you explore the results from your hyperparameter search script without re-running the expensive computations!

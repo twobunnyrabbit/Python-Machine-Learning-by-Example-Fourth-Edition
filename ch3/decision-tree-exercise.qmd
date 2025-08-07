@@ -1,0 +1,240 @@
+---
+title: "Decision Tree Hyperparameter Tuning"
+format: html
+self-contained: true
+---
+
+
+```{python}
+import pandas as pd
+import sys
+import os
+from pathlib import Path
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, classification_report, confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Add repository root to Python path for config import
+# This works in interactive environments like Quarto
+repo_root = Path.cwd()
+while repo_root != repo_root.parent:
+    if (repo_root / 'config.py').exists():
+        break
+    repo_root = repo_root.parent
+sys.path.insert(0, str(repo_root))
+
+from config import get_click_rate_file, get_data_path
+
+# Use configured dataset paths
+data_path = get_click_rate_file('click-rate-train.csv')
+df = pd.read_csv(data_path)
+
+# Display basic information about the dataset
+print("Dataset shape:", df.shape)
+print("\nColumn names:", df.columns.tolist())
+print("\nFirst few rows:")
+print(df.head())
+print("\nDataset info:")
+df.info()
+print("\nTarget variable distribution:")
+print(df['click'].value_counts())
+```
+
+```{python}
+# Data preprocessing
+# Drop features that are not used for prediction
+features_to_drop = ['click', 'id', 'hour', 'device_id', 'device_ip']
+X = df.drop(columns=features_to_drop)
+y = df['click']
+
+# Convert categorical variables to dummy variables
+X = pd.get_dummies(X, drop_first=True)
+
+# Split the data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y)
+
+print("Training set shape:", X_train.shape)
+print("Testing set shape:", X_test.shape)
+print("Training set target distribution:")
+print(y_train.value_counts())
+print("\nTesting set target distribution:")
+print(y_test.value_counts())
+```
+
+```{python}
+# Initialize the Decision Tree Classifier
+dt_classifier = DecisionTreeClassifier(random_state=42)
+
+# Define the hyperparameter grid for tuning
+param_grid = {
+    'max_depth': [10, None],
+    'min_samples_split': [2, 5],
+    'min_samples_leaf': [1, 2],
+    'criterion': ['gini'],
+    # 'max_features': ['sqrt', 'log2', None]
+}
+# param_grid = {
+#     'max_depth': [3, 5, 7, 10, None],
+#     'min_samples_split': [2, 5, 10],
+#     'min_samples_leaf': [1, 2, 4],
+#     'criterion': ['gini', 'entropy'],
+#     'max_features': ['sqrt', 'log2', None]
+# }
+
+# Set up GridSearchCV with cross-validation
+grid_search = GridSearchCV(
+    estimator=dt_classifier,
+    param_grid=param_grid,
+    cv=3,
+    scoring='f1',
+    n_jobs=-1,
+    verbose=1
+)
+
+# Fit the grid search to the training data
+print("Starting hyperparameter tuning...")
+grid_search.fit(X_train, y_train)
+
+# Get the best parameters and best score
+best_params = grid_search.best_params_
+best_score = grid_search.best_score_
+
+print("\nBest parameters found:")
+for param, value in best_params.items():
+    print(f"{param}: {value}")
+
+print(f"\nBest cross-validation F1 score: {best_score:.4f}")
+
+# Get the best model
+best_dt_model = grid_search.best_estimator_
+```
+
+```{python}
+# RandomizedSearchCV approach
+# Initialize the Decision Tree Classifier
+dt_classifier_random = DecisionTreeClassifier(random_state=42)
+
+# Define the hyperparameter distribution for random search
+param_dist = {
+    'max_depth': [3, 5, 7, 10, None],
+    'min_samples_split': [2, 5, 10],
+    'min_samples_leaf': [1, 2, 4],
+    'criterion': ['gini', 'entropy'],
+    'max_features': ['sqrt', 'log2', None]
+}
+
+# Set up RandomizedSearchCV with cross-validation
+from sklearn.model_selection import RandomizedSearchCV
+
+random_search = RandomizedSearchCV(
+    estimator=dt_classifier_random,
+    param_distributions=param_dist,
+    n_iter=50,  # Number of parameter settings that are sampled
+    cv=5,
+    scoring='f1',
+    n_jobs=-1,
+    verbose=1,
+    random_state=42
+)
+
+# Fit the random search to the training data
+print("Starting hyperparameter tuning with RandomizedSearchCV...")
+random_search.fit(X_train, y_train)
+
+# Get the best parameters and best score
+best_params_random = random_search.best_params_
+best_score_random = random_search.best_score_
+
+print("\nBest parameters found with RandomizedSearchCV:")
+for param, value in best_params_random.items():
+    print(f"{param}: {value}")
+
+print(f"\nBest cross-validation F1 score with RandomizedSearchCV: {best_score_random:.4f}")
+
+# Get the best model from random search
+best_dt_model_random = random_search.best_estimator_
+```
+
+```{python}
+# Evaluate the best model on the test set
+y_pred = best_dt_model.predict(X_test)
+y_pred_proba = best_dt_model.predict_proba(X_test)[:, 1]
+
+# Calculate various metrics
+accuracy = accuracy_score(y_test, y_pred)
+precision = precision_score(y_test, y_pred)
+recall = recall_score(y_test, y_pred)
+f1 = f1_score(y_test, y_pred)
+roc_auc = roc_auc_score(y_test, y_pred_proba)
+
+print("Model Evaluation Metrics:")
+print(f"Accuracy: {accuracy:.4f}")
+print(f"Precision: {precision:.4f}")
+print(f"Recall: {recall:.4f}")
+print(f"F1 Score: {f1:.4f}")
+print(f"ROC AUC: {roc_auc:.4f}")
+
+print("\nClassification Report:")
+print(classification_report(y_test, y_pred))
+
+print("\nConfusion Matrix:")
+cm = confusion_matrix(y_test, y_pred)
+print(cm)
+
+# Plot confusion matrix
+plt.figure(figsize=(8, 6))
+sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+            xticklabels=['No Click', 'Click'], 
+            yticklabels=['No Click', 'Click'])
+plt.title('Confusion Matrix')
+plt.ylabel('Actual')
+plt.xlabel('Predicted')
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+# Feature importance analysis
+feature_importance = pd.DataFrame({
+    'feature': X.columns,
+    'importance': best_dt_model.feature_importances_
+}).sort_values('importance', ascending=False)
+
+print("Top 10 Most Important Features:")
+print(feature_importance.head(10))
+
+# Plot feature importance
+plt.figure(figsize=(12, 8))
+top_features = feature_importance.head(10)
+plt.barh(range(len(top_features)), top_features['importance'])
+plt.yticks(range(len(top_features)), top_features['feature'])
+plt.xlabel('Feature Importance')
+plt.title('Top 10 Most Important Features')
+plt.gca().invert_yaxis()
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+# Additional analysis: Check for overfitting
+train_accuracy = best_dt_model.score(X_train, y_train)
+test_accuracy = best_dt_model.score(X_test, y_test)
+
+print(f"Training Accuracy: {train_accuracy:.4f}")
+print(f"Testing Accuracy: {test_accuracy:.4f}")
+print(f"Accuracy Difference: {train_accuracy - test_accuracy:.4f}")
+
+if train_accuracy - test_accuracy > 0.1:
+    print("\nWarning: The model may be overfitting as there's a significant difference between training and testing accuracy.")
+else:
+    print("\nThe model shows good generalization as the training and testing accuracies are close.")
+```
+
+The `df` has data on click rate for a website. The response variable is `click`. These features 'click', 'id', 'hour', 'device_id', 'device_ip' are not used in prediction of click rate (`click`).
+The goal here is to create a model based on decision tree to predict `click`. Generate the necessary code to train the model and fine tune the model to achieve the best performance. Output the best combination of associated hyperparameters. Finally, evaluate the model metrics.
+
+```{python}
+df.columns
+```

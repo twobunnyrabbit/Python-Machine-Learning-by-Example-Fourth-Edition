@@ -11,7 +11,21 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Get the repository root directory (where this config.py file is located)
-REPO_ROOT = Path(__file__).parent.absolute()
+# Handle both script and interactive environments
+try:
+    # Works in Python scripts
+    REPO_ROOT = Path(__file__).parent.absolute()
+except NameError:
+    # Works in Jupyter/Quarto - find repo root by looking for .env file
+    current_path = Path.cwd()
+    while current_path != current_path.parent:
+        if (current_path / '.env').exists() or (current_path / 'config.py').exists():
+            REPO_ROOT = current_path
+            break
+        current_path = current_path.parent
+    else:
+        # Fallback to current working directory
+        REPO_ROOT = Path.cwd()
 
 # Load environment variables from .env file
 dotenv_path = REPO_ROOT / '.env'

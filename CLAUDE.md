@@ -64,9 +64,9 @@ All datasets are stored on OneDrive and accessed via a global configuration syst
 2. Configuration via `.env` file (not committed to repo)
 3. Global `config.py` module provides path constants
 
-**Usage in code:**
+**Usage in Python scripts:**
 ```python
-# Import configuration
+# Import configuration (works in .py files)
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -75,6 +75,23 @@ from config import get_movielens_file, get_click_rate_file, get_data_path
 # Use dataset paths
 data_path = get_movielens_file('ratings.dat')
 df = pd.read_csv(data_path, header=None, sep='::', engine='python')
+```
+
+**Usage in Jupyter notebooks/Quarto:**
+```python
+# Import configuration (works in .ipynb/.qmd files)
+import sys
+from pathlib import Path
+
+# Find repository root and add to path
+repo_root = Path.cwd()
+while repo_root != repo_root.parent:
+    if (repo_root / 'config.py').exists():
+        break
+    repo_root = repo_root.parent
+sys.path.insert(0, str(repo_root))
+
+from config import get_movielens_file, get_click_rate_file, get_data_path
 ```
 
 **Available functions:**
@@ -103,3 +120,11 @@ Each chapter typically includes both custom implementations and scikit-learn equ
 3. Follow the educational pattern: theory → custom implementation → sklearn comparison
 4. Convert between .qmd/.ipynb/.py formats as needed for compatibility
 5. Include proper attribution and chapter references in all new code
+
+## Common Issues and Solutions
+
+### Multiprocessing Warnings in Interactive Environments
+When using `GridSearchCV` or `RandomizedSearchCV` in Quarto/Jupyter:
+- **Problem**: ResourceTracker and joblib warnings when using `n_jobs=-1`
+- **Solution**: Use `n_jobs=1` in interactive environments or set `mp.set_start_method('spawn')`
+- **Cause**: macOS multiprocessing conflicts in interactive Python environments

@@ -1,0 +1,200 @@
+---
+title: "Decision Tree with Model Caching Example"
+format: html
+self-contained: true
+---
+
+This example demonstrates how to use the model caching utility to save time on repeated GridSearchCV runs.
+
+```{python}
+# Setup for dataset access and model caching in interactive environments
+import pandas as pd
+import sys
+import os
+from pathlib import Path
+from sklearn.model_selection import train_test_split, GridSearchCV, RandomizedSearchCV
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, classification_report, confusion_matrix
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Add repository root to Python path for config import
+repo_root = Path.cwd()
+while repo_root != repo_root.parent:
+    if (repo_root / 'config.py').exists():
+        break
+    repo_root = repo_root.parent
+sys.path.insert(0, str(repo_root))
+
+# Import configuration and caching utilities
+from config import get_click_rate_file
+from model_cache import cached_grid_search, ModelCache
+
+print("✅ Setup complete - dataset config and model caching available")
+```
+
+```{python}
+# Load and prepare data
+data_path = get_click_rate_file('click-rate-train.csv')
+df = pd.read_csv(data_path)
+
+# Data preprocessing
+features_to_drop = ['click', 'id', 'hour', 'device_id', 'device_ip']
+X = df.drop(columns=features_to_drop)
+y = df['click']
+
+# Convert categorical variables to dummy variables
+X = pd.get_dummies(X, drop_first=True)
+
+# Split the data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y)
+
+print(f"Training set shape: {X_train.shape}")
+print(f"Testing set shape: {X_test.shape}")
+```
+
+```{python}
+# Example 1: Using the convenient cached_grid_search function
+print("🔍 Running cached GridSearchCV...")
+
+# Define parameter grid
+param_grid = {
+    'max_depth': [5, 7, 10, None],
+    'min_samples_split': [2, 5, 10],
+    'min_samples_leaf': [1, 2, 4],
+    'criterion': ['gini', 'entropy']
+}
+
+# This automatically handles caching - will reuse results if parameters haven't changed
+grid_search = cached_grid_search(
+    estimator=DecisionTreeClassifier(random_state=42),
+    param_grid=param_grid,
+    X_train=X_train, 
+    y_train=y_train,
+    model_name="decision_tree_clickrate_v1",  # Unique identifier
+    cv=3,                                      # Reduced for faster demo
+    scoring='f1',
+    n_jobs=1,                                 # Avoid multiprocessing issues
+    verbose=1
+)
+
+print(f"\nBest parameters: {grid_search.best_params_}")
+print(f"Best cross-validation F1 score: {grid_search.best_score_:.4f}")
+```
+
+```{python}
+# Example 2: Manual caching with more control
+print("🔍 Running manual caching example...")
+
+# Create cache instance
+cache = ModelCache("model_cache")
+
+# Define parameters for a different search
+param_dist_random = {
+    'max_depth': [3, 5, 7, 10, 15, None],
+    'min_samples_split': [2, 5, 10, 20],
+    'min_samples_leaf': [1, 2, 4, 8],
+    'criterion': ['gini', 'entropy'],
+    'max_features': ['sqrt', 'log2', None]
+}
+
+# Create parameter dictionary for hashing
+search_params = {
+    'estimator': 'DecisionTreeClassifier',
+    'param_dist': param_dist_random,
+    'n_iter': 20,
+    'cv': 3,
+    'scoring': 'f1',
+    'random_state': 42
+}
+
+# Try to load from cache
+model_name = "decision_tree_randomsearch_v1"
+cached_result = cache.load_search_result(model_name, search_params)
+
+if cached_result is None:
+    print("No cached result found, running RandomizedSearchCV...")
+    
+    random_search = RandomizedSearchCV(
+        estimator=DecisionTreeClassifier(random_state=42),
+        param_distributions=param_dist_random,
+        n_iter=20,
+        cv=3,
+        scoring='f1',
+        n_jobs=1,
+        verbose=1,
+        random_state=42
+    )
+    
+    random_search.fit(X_train, y_train)
+    
+    # Save to cache
+    cache.save_search_result(model_name, random_search, search_params)
+    
+else:
+    random_search = cached_result
+
+print(f"\nRandomizedSearchCV Best parameters: {random_search.best_params_}")
+print(f"Best cross-validation F1 score: {random_search.best_score_:.4f}")
+```
+
+```{python}
+# Cache management examples
+print("📋 Cache Management:")
+
+# List all cached models
+cache.list_cached_models()
+```
+
+```{python}
+# Evaluate the best model from grid search
+best_model = grid_search.best_estimator_
+y_pred = best_model.predict(X_test)
+y_pred_proba = best_model.predict_proba(X_test)[:, 1]
+
+# Calculate metrics
+accuracy = accuracy_score(y_test, y_pred)
+precision = precision_score(y_test, y_pred)
+recall = recall_score(y_test, y_pred)
+f1 = f1_score(y_test, y_pred)
+roc_auc = roc_auc_score(y_test, y_pred_proba)
+
+print("🎯 Model Evaluation Metrics:")
+print(f"Accuracy:  {accuracy:.4f}")
+print(f"Precision: {precision:.4f}")
+print(f"Recall:    {recall:.4f}")
+print(f"F1 Score:  {f1:.4f}")
+print(f"ROC AUC:   {roc_auc:.4f}")
+```
+
+```{python}
+# Feature importance (if you want to see top features)
+feature_importance = pd.DataFrame({
+    'feature': X.columns,
+    'importance': best_model.feature_importances_
+}).sort_values('importance', ascending=False)
+
+print("🔍 Top 10 Most Important Features:")
+print(feature_importance.head(10))
+```
+
+## How Model Caching Works
+
+1. **Automatic Detection**: The cache automatically detects when parameters change
+2. **Data Change Detection**: Optionally detects when training data changes
+3. **Persistent Storage**: Results are saved to disk and survive notebook restarts
+4. **Easy Management**: List, clear, and manage cached models easily
+
+## Benefits
+
+- ⏱️ **Save Time**: No need to rerun expensive searches when experimenting
+- 🔄 **Reproducible**: Consistent results across sessions
+- 💾 **Persistent**: Cache survives notebook restarts and system reboots
+- 🎛️ **Flexible**: Works with any scikit-learn search method
+
+## Usage Tips
+
+- Use descriptive model names like `"decision_tree_clickrate_v1"`
+- Include version numbers when changing approaches
+- Clear cache when you want fresh results: `cache.clear_cache("model_name")`
+- Check `cache.list_cached_models()` to see what's stored
