@@ -19,6 +19,7 @@ This project uses `uv` for Python package management:
 - Core ML libraries: scikit-learn, numpy, pandas, matplotlib, seaborn
 - Advanced libraries: scipy, plotly, plotnine
 - Data sources: kaggle, kagglehub, ucimlrepo
+- Configuration: python-dotenv (for dataset path management)
 - Additional: akde, openpyxl, pyhere
 
 ## Repository Structure
@@ -55,10 +56,31 @@ jupyter nbconvert --to python <notebook>.ipynb --TemplateExporter.exclude_input_
 - Functions include comprehensive docstrings with parameter and return type descriptions
 - Code follows educational patterns with clear variable names and step-by-step implementations
 
-### Data Access
-- MovieLens dataset (ml-1m/) in data/ch02/ for recommendation examples
-- CSV files for classification examples in respective chapter directories
-- External datasets accessed via kaggle/ucimlrepo APIs
+### Dataset Configuration
+All datasets are stored on OneDrive and accessed via a global configuration system:
+
+**Setup:**
+1. Datasets stored in: `/Users/vincent/Library/CloudStorage/OneDrive-Personal/Documents/Programming/python/data-files/Python-Machine-Learning-by-Example-Fourth-Edition/data`
+2. Configuration via `.env` file (not committed to repo)
+3. Global `config.py` module provides path constants
+
+**Usage in code:**
+```python
+# Import configuration
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent))
+from config import get_movielens_file, get_click_rate_file, get_data_path
+
+# Use dataset paths
+data_path = get_movielens_file('ratings.dat')
+df = pd.read_csv(data_path, header=None, sep='::', engine='python')
+```
+
+**Available functions:**
+- `get_movielens_file(filename)` - MovieLens dataset files
+- `get_click_rate_file(filename)` - Click rate dataset files  
+- `get_data_path(chapter, filename)` - Any dataset by chapter number
 
 ## ML Implementation Patterns
 

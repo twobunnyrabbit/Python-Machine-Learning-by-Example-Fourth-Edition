@@ -13,9 +13,14 @@
 
 import numpy as np
 import pandas as pd
+import sys
+from pathlib import Path
 
+# Add parent directory to path to import config
+sys.path.append(str(Path(__file__).parent.parent))
+from config import get_movielens_file
 
-data_path = 'ml-1m/ratings.dat'
+data_path = get_movielens_file('ratings.dat')
 df = pd.read_csv(data_path, header=None, sep='::', engine='python')
 df.columns = ['user_id', 'movie_id', 'rating', 'timestamp']
 print(df)
