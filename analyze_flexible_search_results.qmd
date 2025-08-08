@@ -1,0 +1,751 @@
+---
+title: "Analyze Flexible Hyperparameter Search Results"
+format: html
+self-contained: true
+---
+
+This notebook analyzes results from the flexible hyperparameter search script, supporting DecisionTreeClassifier, RandomForestClassifier, and XGBClassifier with both default and custom parameter value ranges.
+
+## Setup and Load Cached Results
+
+```{python}
+# Setup for dataset access and analysis
+import pandas as pd
+import sys
+import os
+from pathlib import Path
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+from datetime import datetime
+
+# Add repository root to Python path
+repo_root = Path.cwd()
+while repo_root != repo_root.parent:
+    if (repo_root / 'config.py').exists():
+        break
+    repo_root = repo_root.parent
+sys.path.insert(0, str(repo_root))
+
+from model_cache import ModelCache
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, classification_report, confusion_matrix
+
+# Initialize cache and show available models
+cache = ModelCache()
+print("📋 Available cached models:")
+cached_models = cache.list_cached_models()
+
+# Set style for better plots
+plt.style.use('default')
+sns.set_palette("husl")
+```
+
+```{python}
+# Helper function to detect classifier type from model name
+def detect_classifier_type(model_name):
+    """Detect classifier type from cached model name."""
+    if 'decision_tree' in model_name.lower():
+        return 'Decision Tree'
+    elif 'random_forest' in model_name.lower():
+        return 'Random Forest'
+    elif 'xgboost' in model_name.lower():
+        return 'XGBoost'
+    else:
+        return 'Unknown'
+
+# Helper function to extract tuned parameters from model name
+def extract_tuned_params(model_name):
+    """Extract parameter names from model name."""
+    parts = model_name.split('_')
+    # Find the search type (grid or randomized)
+    if 'grid' in parts:
+        search_type = 'grid'
+        param_start = parts.index('grid') + 1
+    elif 'randomized' in parts:
+        search_type = 'randomized'
+        param_start = parts.index('randomized') + 1
+    else:
+        search_type = 'unknown'
+        param_start = 2  # fallback
+    
+    # Extract parameter names
+    tuned_params = parts[param_start:] if param_start < len(parts) else []
+    return search_type, tuned_params
+
+# Display available models with details
+if cached_models:
+    print("\n🔍 Model Analysis Summary:")
+    print("-" * 80)
+    for model in cached_models:
+        classifier_type = detect_classifier_type(model['model_name'])
+        search_type, params = extract_tuned_params(model['model_name'])
+        timestamp = datetime.fromisoformat(model['timestamp'])
+        
+        print(f"📊 {model['model_name']}")
+        print(f"   Type: {classifier_type} ({search_type} search)")
+        print(f"   Tuned Parameters: {', '.join(params) if params else 'N/A'}")
+        print(f"   Best Score: {model['best_score']:.4f}")
+        print(f"   Date: {timestamp.strftime('%Y-%m-%d %H:%M')}")
+        print()
+```
+
+## Interactive Model Selection
+
+```{python}
+# Let user select which model to analyze
+print("Select a model to analyze in detail:")
+print("(You can modify the model_name_to_analyze variable below)")
+
+# You can change this to analyze different models
+# Copy the exact model name from the list above
+model_name_to_analyze = input("Enter model name (or press Enter for most recent): ").strip()
+
+if not model_name_to_analyze and cached_models:
+    # Use most recent model if none specified
+    model_name_to_analyze = cached_models[0]['model_name']
+    print(f"Using most recent model: {model_name_to_analyze}")
+
+selected_model = None
+selected_metadata = None
+
+for model in cached_models:
+    if model['model_name'] == model_name_to_analyze:
+        selected_metadata = model
+        break
+
+if selected_metadata:
+    print(f"\n✅ Selected model: {model_name_to_analyze}")
+    classifier_type = detect_classifier_type(model_name_to_analyze)
+    search_type, tuned_params = extract_tuned_params(model_name_to_analyze)
+    
+    print(f"   Classifier: {classifier_type}")
+    print(f"   Search Type: {search_type}")
+    print(f"   Tuned Parameters: {', '.join(tuned_params)}")
+    print(f"   Best CV Score: {selected_metadata['best_score']:.4f}")
+else:
+    print("❌ Model not found. Please check the model name.")
+```
+
+## Load Model and Test Data
+
+```{python}
+# Load the selected model from cache
+search_result = None
+
+if selected_metadata:
+    try:
+        # Extract the parameters that were used when caching this model
+        model_name = selected_metadata['model_name']
+        params_dict = selected_metadata['params_dict']
+        
+        print(f"🔄 Loading model: {model_name}")
+        
+        # Load the cached search result using the stored parameters
+        search_result = cache.load_search_result(model_name, params_dict)
+        
+        if search_result:
+            print(f"✅ Successfully loaded model with best score: {search_result.best_score_:.4f}")
+            print(f"   Best parameters: {search_result.best_params_}")
+        else:
+            print(f"❌ Could not load cached model. The cache file may be missing or corrupted.")
+            
+    except Exception as e:
+        print(f"❌ Error loading model: {e}")
+        search_result = None
+
+if search_result is None:
+    print("\n⚠️  No model loaded. The analysis sections below will show examples of what")
+    print("   would be available once a model is successfully loaded.")
+else:
+    print(f"\n✅ Model loaded successfully! Proceeding with analysis...")
+```
+
+```{python}
+# Note: For complete analysis, you would need to load the same test data that was used
+# during training. The analysis functions below are set up to work with loaded models.
+
+# If you have the test data available, you can load it here:
+# X_test, y_test = load_your_test_data()  # Replace with your data loading logic
+
+# For demonstration purposes, we'll show what analysis is available
+print("📊 Available Analysis:")
+print("- Model Performance Analysis (requires test data)")
+print("- Parameter Search Analysis") 
+print("- Feature Importance Analysis (for tree-based models)")
+print("- Classifier-Specific Analysis")
+
+if search_result and selected_metadata:
+    print(f"\n🎯 Current Model Details:")
+    print(f"   Best CV Score: {search_result.best_score_:.4f}")
+    print(f"   Best Parameters: {search_result.best_params_}")
+    print(f"   Total CV Results: {len(search_result.cv_results_['mean_test_score']) if hasattr(search_result, 'cv_results_') else 'N/A'}")
+    
+    # Display comprehensive metrics if available
+    if 'test_metrics' in selected_metadata:
+        test_metrics = selected_metadata['test_metrics']
+        print(f"\n📊 Test Set Performance:")
+        print(f"   Accuracy:  {test_metrics['accuracy']:.4f}")
+        print(f"   Precision: {test_metrics['precision']:.4f}")
+        print(f"   Recall:    {test_metrics['recall']:.4f}")
+        print(f"   F1 Score:  {test_metrics['f1']:.4f}")
+        if test_metrics['roc_auc'] is not None:
+            print(f"   ROC AUC:   {test_metrics['roc_auc']:.4f}")
+    
+    if 'data_info' in selected_metadata:
+        data_info = selected_metadata['data_info']
+        print(f"\n📈 Dataset Information:")
+        print(f"   Training Size: {data_info['train_size']:,}")
+        print(f"   Test Size:     {data_info['test_size']:,}")
+        print(f"   Features:      {data_info['n_features']}")
+        print(f"   Test Ratio:    {data_info['test_size_ratio']:.1%}")
+    
+    if 'training_info' in selected_metadata:
+        training_info = selected_metadata['training_info']
+        print(f"\n⚡ Training Information:")
+        print(f"   Search Type:        {training_info['search_type']}")
+        print(f"   Combinations Tested: {training_info['total_combinations_tested']}")
+        print(f"   Training Time:      {training_info['training_time_minutes']:.1f} minutes")
+        print(f"   CV Folds:          {training_info['cv_folds']}")
+        print(f"   Custom Params:     {'Yes' if training_info['custom_params_used'] else 'No'}")
+        
+    if 'model_specific' in selected_metadata:
+        model_specific = selected_metadata['model_specific']
+        if model_specific['n_estimators'] is not None:
+            print(f"\n🌲 Model Architecture:")
+            print(f"   N Estimators: {model_specific['n_estimators']}")
+        if model_specific['tree_depth'] is not None:
+            print(f"   Tree Depth:   {model_specific['tree_depth']}")
+        if model_specific['n_leaves'] is not None:
+            print(f"   Tree Leaves:  {model_specific['n_leaves']}")
+```
+
+## Comprehensive Metrics Visualization
+
+```{python}
+# Visualize comprehensive metrics if available
+if selected_metadata and 'test_metrics' in selected_metadata:
+    
+    # Create performance comparison chart
+    plt.figure(figsize=(14, 10))
+    
+    # Subplot 1: CV vs Test Performance Comparison
+    plt.subplot(2, 3, 1)
+    cv_score = selected_metadata['best_score']
+    test_f1 = selected_metadata['test_metrics']['f1']
+    
+    metrics_comparison = ['CV Score', 'Test F1']
+    scores = [cv_score, test_f1]
+    colors = ['skyblue', 'lightcoral']
+    
+    bars = plt.bar(metrics_comparison, scores, color=colors)
+    plt.title('Cross-Validation vs Test Performance')
+    plt.ylabel('Score')
+    plt.ylim(0, 1)
+    
+    # Add value labels on bars
+    for bar, score in zip(bars, scores):
+        plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01, 
+                f'{score:.3f}', ha='center', va='bottom')
+    
+    # Subplot 2: Test Metrics Breakdown
+    plt.subplot(2, 3, 2)
+    test_metrics = selected_metadata['test_metrics']
+    metric_names = ['Accuracy', 'Precision', 'Recall', 'F1']
+    metric_values = [test_metrics['accuracy'], test_metrics['precision'], 
+                    test_metrics['recall'], test_metrics['f1']]
+    
+    bars = plt.bar(metric_names, metric_values, color=['lightgreen', 'orange', 'purple', 'gold'])
+    plt.title('Test Set Metrics Breakdown')
+    plt.ylabel('Score')
+    plt.ylim(0, 1)
+    plt.xticks(rotation=45)
+    
+    for bar, value in zip(bars, metric_values):
+        plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01, 
+                f'{value:.3f}', ha='center', va='bottom')
+    
+    # Subplot 3: Training Efficiency
+    if 'training_info' in selected_metadata:
+        plt.subplot(2, 3, 3)
+        training_info = selected_metadata['training_info']
+        
+        # Efficiency metrics
+        efficiency_data = {
+            'Time (min)': training_info['training_time_minutes'],
+            'Combinations': training_info['total_combinations_tested'] / 10,  # Scale down
+            'CV Folds': training_info['cv_folds']
+        }
+        
+        plt.bar(efficiency_data.keys(), efficiency_data.values(), 
+               color=['tomato', 'lightblue', 'lightgreen'])
+        plt.title('Training Efficiency Metrics')
+        plt.ylabel('Value (Combinations/10)')
+        plt.xticks(rotation=45)
+    
+    # Subplot 4: Data Distribution
+    if 'data_info' in selected_metadata:
+        plt.subplot(2, 3, 4)
+        data_info = selected_metadata['data_info']
+        
+        # Train vs Test size
+        sizes = [data_info['train_size'], data_info['test_size']]
+        labels = ['Training', 'Test']
+        colors = ['lightcoral', 'skyblue']
+        
+        plt.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
+        plt.title('Train/Test Split Distribution')
+    
+    # Subplot 5: Target Distribution in Test Set
+    if 'data_info' in selected_metadata and 'target_distribution_test' in selected_metadata['data_info']:
+        plt.subplot(2, 3, 5)
+        target_dist = selected_metadata['data_info']['target_distribution_test']
+        
+        plt.bar(target_dist.keys(), target_dist.values(), color=['salmon', 'lightsteelblue'])
+        plt.title('Target Distribution (Test Set)')
+        plt.ylabel('Count')
+        plt.xlabel('Class')
+    
+    # Subplot 6: Feature Importance (if available)
+    if ('model_specific' in selected_metadata and 
+        selected_metadata['model_specific']['feature_importances'] is not None):
+        plt.subplot(2, 3, 6)
+        
+        importances = selected_metadata['model_specific']['feature_importances']
+        if 'data_info' in selected_metadata and 'feature_names' in selected_metadata['data_info']:
+            feature_names = selected_metadata['data_info']['feature_names'][:len(importances)]
+        else:
+            feature_names = [f'Feature_{i}' for i in range(len(importances))]
+        
+        # Show top 10 features
+        top_indices = np.argsort(importances)[-10:]
+        top_importances = np.array(importances)[top_indices]
+        top_names = [feature_names[i] for i in top_indices]
+        
+        plt.barh(range(len(top_importances)), top_importances)
+        plt.yticks(range(len(top_importances)), top_names)
+        plt.title('Top 10 Feature Importances')
+        plt.xlabel('Importance')
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Display additional metrics summary
+    if 'probability_metrics' in selected_metadata:
+        prob_metrics = selected_metadata['probability_metrics']
+        print("\n🎲 Advanced Probability Metrics:")
+        if prob_metrics['log_loss'] is not None:
+            print(f"   Log Loss:           {prob_metrics['log_loss']:.4f}")
+        if prob_metrics['average_precision'] is not None:
+            print(f"   Average Precision:  {prob_metrics['average_precision']:.4f}")
+        if prob_metrics['brier_score'] is not None:
+            print(f"   Brier Score:        {prob_metrics['brier_score']:.4f}")
+
+else:
+    print("💡 No comprehensive metrics available. This model may have been cached before")
+    print("   the comprehensive metrics feature was implemented. Run a new search to")
+    print("   get comprehensive metrics.")
+```
+
+## Model Performance Analysis
+
+```{python}
+# This section will work when search_result is properly loaded
+# For demonstration, we'll show what the analysis would look like
+
+def analyze_model_performance(search_result, X_test, y_test, classifier_type):
+    """Analyze model performance with appropriate visualizations."""
+    
+    best_model = search_result.best_estimator_
+    
+    # Predictions
+    y_pred = best_model.predict(X_test)
+    
+    # Probability predictions (if available)
+    try:
+        y_pred_proba = best_model.predict_proba(X_test)[:, 1]
+        has_proba = True
+    except:
+        y_pred_proba = None
+        has_proba = False
+    
+    # Basic metrics
+    metrics = {
+        'Accuracy': accuracy_score(y_test, y_pred),
+        'Precision': precision_score(y_test, y_pred, average='binary'),
+        'Recall': recall_score(y_test, y_pred, average='binary'),
+        'F1 Score': f1_score(y_test, y_pred, average='binary')
+    }
+    
+    if has_proba:
+        metrics['ROC AUC'] = roc_auc_score(y_test, y_pred_proba)
+    
+    print(f"📊 {classifier_type} Performance Metrics:")
+    print("=" * 50)
+    for metric, value in metrics.items():
+        print(f"{metric:>12}: {value:.4f}")
+    
+    # Confusion Matrix
+    cm = confusion_matrix(y_test, y_pred)
+    
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=['Negative', 'Positive'],
+                yticklabels=['Negative', 'Positive'])
+    plt.title(f'Confusion Matrix - {classifier_type}')
+    plt.ylabel('Actual')
+    plt.xlabel('Predicted')
+    plt.tight_layout()
+    plt.show()
+    
+    # Feature importance (for tree-based models)
+    if hasattr(best_model, 'feature_importances_'):
+        feature_importance = pd.DataFrame({
+            'feature': X_test.columns,
+            'importance': best_model.feature_importances_
+        }).sort_values('importance', ascending=False)
+        
+        print(f"\n🔍 Top 15 Most Important Features:")
+        print(feature_importance.head(15))
+        
+        # Plot feature importance
+        plt.figure(figsize=(12, 8))
+        top_features = feature_importance.head(15)
+        plt.barh(range(len(top_features)), top_features['importance'])
+        plt.yticks(range(len(top_features)), top_features['feature'])
+        plt.xlabel('Feature Importance')
+        plt.title(f'Top 15 Feature Importances - {classifier_type}')
+        plt.gca().invert_yaxis()
+        plt.tight_layout()
+        plt.show()
+    
+    return metrics
+
+# Example usage when both model and test data are loaded:
+if search_result and 'X_test' in locals() and 'y_test' in locals():
+    metrics = analyze_model_performance(search_result, X_test, y_test, classifier_type)
+else:
+    print("💡 To run this analysis, ensure you have:")
+    print("   1. A loaded search_result (✅ Available)" if search_result else "   1. A loaded search_result (❌ Not available)")
+    print("   2. Test data (X_test, y_test) loaded above")
+```
+
+## Parameter Analysis
+
+```{python}
+def analyze_parameter_search(search_result, tuned_params, classifier_type):
+    """Analyze the parameter search results."""
+    
+    if not hasattr(search_result, 'cv_results_'):
+        print("❌ No cross-validation results available for analysis")
+        return
+    
+    cv_results = pd.DataFrame(search_result.cv_results_)
+    
+    print(f"📈 Parameter Search Analysis - {classifier_type}:")
+    print("=" * 50)
+    print(f"Total combinations tested: {len(cv_results)}")
+    print(f"Best parameter combination rank: {cv_results[cv_results['rank_test_score'] == 1].index[0] + 1}")
+    
+    # Show top 10 parameter combinations
+    top_results = cv_results.nsmallest(10, 'rank_test_score')[
+        ['rank_test_score', 'mean_test_score', 'std_test_score', 'params']
+    ]
+    
+    print(f"\n🏆 Top 10 Parameter Combinations:")
+    print("-" * 80)
+    for idx, row in top_results.iterrows():
+        print(f"Rank {row['rank_test_score']:2d}: Score={row['mean_test_score']:.4f} (±{row['std_test_score']:.4f})")
+        print(f"         Params: {row['params']}")
+        print()
+    
+    # Parameter importance analysis
+    if len(tuned_params) >= 2:
+        analyze_parameter_interactions(cv_results, tuned_params)
+
+def analyze_parameter_interactions(cv_results, tuned_params):
+    """Analyze interactions between tuned parameters."""
+    
+    # Extract parameter values for analysis
+    param_data = []
+    for idx, row in cv_results.iterrows():
+        param_row = {'score': row['mean_test_score']}
+        for param, value in row['params'].items():
+            param_row[param] = value
+        param_data.append(param_row)
+    
+    param_df = pd.DataFrame(param_data)
+    
+    # Correlation analysis for numerical parameters
+    numerical_params = []
+    for param in tuned_params:
+        if param in param_df.columns:
+            # Check if parameter values are numerical
+            try:
+                pd.to_numeric(param_df[param])
+                numerical_params.append(param)
+            except:
+                pass
+    
+    if len(numerical_params) >= 2:
+        plt.figure(figsize=(10, 8))
+        
+        # Create correlation matrix
+        corr_data = param_df[numerical_params + ['score']].copy()
+        for param in numerical_params:
+            corr_data[param] = pd.to_numeric(corr_data[param], errors='coerce')
+        
+        correlation_matrix = corr_data.corr()
+        
+        sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', center=0,
+                   square=True, fmt='.3f')
+        plt.title('Parameter Correlation with Score')
+        plt.tight_layout()
+        plt.show()
+    
+    # Individual parameter impact
+    print(f"\n📊 Individual Parameter Impact:")
+    for param in tuned_params[:3]:  # Show top 3 parameters
+        if param in param_df.columns:
+            param_impact = param_df.groupby(param)['score'].agg(['mean', 'std', 'count'])
+            print(f"\n{param}:")
+            print(param_impact.round(4))
+
+# Execute parameter analysis if model is loaded:
+if search_result and selected_metadata:
+    classifier_type = detect_classifier_type(selected_metadata['model_name'])
+    search_type, tuned_params = extract_tuned_params(selected_metadata['model_name'])
+    analyze_parameter_search(search_result, tuned_params, classifier_type)
+else:
+    print("💡 Parameter analysis requires a loaded search_result and selected_metadata")
+```
+
+## Classifier-Specific Analysis
+
+```{python}
+def classifier_specific_analysis(search_result, classifier_type):
+    """Provide classifier-specific insights."""
+    
+    best_model = search_result.best_estimator_
+    best_params = search_result.best_params_
+    
+    print(f"🎯 {classifier_type}-Specific Analysis:")
+    print("=" * 50)
+    
+    if classifier_type == 'Decision Tree':
+        analyze_decision_tree(best_model, best_params)
+    elif classifier_type == 'Random Forest':
+        analyze_random_forest(best_model, best_params)
+    elif classifier_type == 'XGBoost':
+        analyze_xgboost(best_model, best_params)
+
+def analyze_decision_tree(model, params):
+    """Analyze decision tree specific metrics."""
+    print(f"🌳 Decision Tree Analysis:")
+    
+    tree = model.tree_
+    print(f"   Tree Depth: {tree.max_depth}")
+    print(f"   Number of Leaves: {tree.n_leaves}")
+    print(f"   Number of Node Splits: {tree.node_count - tree.n_leaves}")
+    
+    # Complexity analysis
+    if tree.max_depth > 10:
+        print("   ⚠️  Deep tree detected - check for overfitting")
+    elif tree.max_depth < 3:
+        print("   ⚠️  Shallow tree - might be underfitting")
+    else:
+        print("   ✅ Tree depth appears reasonable")
+
+def analyze_random_forest(model, params):
+    """Analyze random forest specific metrics."""
+    print(f"🌲 Random Forest Analysis:")
+    
+    print(f"   Number of Trees: {model.n_estimators}")
+    print(f"   Features per Split: {model.max_features}")
+    print(f"   Bootstrap Sampling: {model.bootstrap}")
+    
+    # Tree depth analysis
+    tree_depths = [tree.tree_.max_depth for tree in model.estimators_]
+    print(f"   Average Tree Depth: {np.mean(tree_depths):.1f} (±{np.std(tree_depths):.1f})")
+    print(f"   Depth Range: {min(tree_depths)} - {max(tree_depths)}")
+    
+    # Recommendations
+    if model.n_estimators < 100:
+        print("   💡 Consider increasing n_estimators for potentially better performance")
+    elif model.n_estimators > 500:
+        print("   💡 High n_estimators - diminishing returns might apply")
+
+def analyze_xgboost(model, params):
+    """Analyze XGBoost specific metrics."""
+    print(f"🚀 XGBoost Analysis:")
+    
+    print(f"   Number of Estimators: {model.n_estimators}")
+    print(f"   Learning Rate: {model.learning_rate}")
+    print(f"   Max Depth: {model.max_depth}")
+    
+    if hasattr(model, 'feature_importances_'):
+        print(f"   Feature Importance Type: Gain-based")
+    
+    # Performance recommendations
+    lr_est_product = model.learning_rate * model.n_estimators
+    if lr_est_product < 10:
+        print("   💡 Consider increasing learning_rate or n_estimators")
+    elif lr_est_product > 100:
+        print("   💡 High learning_rate * n_estimators - check for overfitting")
+
+# Execute classifier-specific analysis if model is loaded:
+if search_result and selected_metadata:
+    classifier_type = detect_classifier_type(selected_metadata['model_name'])
+    classifier_specific_analysis(search_result, classifier_type)
+else:
+    print("💡 Classifier-specific analysis requires a loaded search_result and selected_metadata")
+```
+
+## Model Comparison (Multiple Models)
+
+```{python}
+def compare_multiple_models():
+    """Compare multiple cached models if available."""
+    
+    if len(cached_models) <= 1:
+        print("Only one model available - no comparison possible")
+        return
+    
+    print("🔄 Model Comparison:")
+    print("=" * 60)
+    
+    comparison_data = []
+    
+    for model in cached_models[:5]:  # Compare top 5 most recent
+        classifier_type = detect_classifier_type(model['model_name'])
+        search_type, tuned_params = extract_tuned_params(model['model_name'])
+        
+        comparison_data.append({
+            'Model': model['model_name'][:30] + '...' if len(model['model_name']) > 30 else model['model_name'],
+            'Classifier': classifier_type,
+            'Search Type': search_type.title(),
+            'Parameters': len(tuned_params),
+            'Best Score': model['best_score'],
+            'Date': datetime.fromisoformat(model['timestamp']).strftime('%m/%d %H:%M')
+        })
+    
+    comparison_df = pd.DataFrame(comparison_data)
+    print(comparison_df.to_string(index=False))
+    
+    # Plot comparison
+    if len(comparison_df) >= 2:
+        plt.figure(figsize=(12, 6))
+        
+        # Score comparison
+        plt.subplot(1, 2, 1)
+        bars = plt.bar(range(len(comparison_df)), comparison_df['Best Score'])
+        plt.xlabel('Model Index')
+        plt.ylabel('Best CV Score')
+        plt.title('Model Performance Comparison')
+        plt.xticks(range(len(comparison_df)), [f"M{i+1}" for i in range(len(comparison_df))])
+        
+        # Color bars by classifier type
+        colors = {'Decision Tree': 'skyblue', 'Random Forest': 'lightgreen', 'XGBoost': 'lightcoral'}
+        for bar, classifier in zip(bars, comparison_df['Classifier']):
+            bar.set_color(colors.get(classifier, 'gray'))
+        
+        # Parameter count comparison
+        plt.subplot(1, 2, 2)
+        plt.scatter(comparison_df['Parameters'], comparison_df['Best Score'], 
+                   c=[colors.get(c, 'gray') for c in comparison_df['Classifier']], s=100)
+        plt.xlabel('Number of Tuned Parameters')
+        plt.ylabel('Best CV Score')
+        plt.title('Parameters vs Performance')
+        
+        # Add legend
+        for classifier, color in colors.items():
+            if classifier in comparison_df['Classifier'].values:
+                plt.scatter([], [], c=color, label=classifier)
+        plt.legend()
+        
+        plt.tight_layout()
+        plt.show()
+
+compare_multiple_models()
+```
+
+## Usage Instructions
+
+To use this analysis notebook effectively:
+
+### 1. **Run a Hyperparameter Search First**
+```bash
+# Using default parameter ranges
+python flexible_hyperparameter_search.py \
+    --classifier decision_tree \
+    --dataset your_data.csv \
+    --target your_target \
+    --tune-params max_depth,criterion
+
+# Using custom parameter values (JSON format)
+python flexible_hyperparameter_search.py \
+    --classifier decision_tree \
+    --dataset your_data.csv \
+    --target your_target \
+    --tune-params max_depth,criterion \
+    --param-values '{"max_depth": [5, 10, 15], "criterion": ["gini"]}'
+
+# Using custom parameter values (key-value format)
+python flexible_hyperparameter_search.py \
+    --classifier random_forest \
+    --dataset your_data.csv \
+    --target your_target \
+    --tune-params n_estimators,max_depth \
+    --param-values "n_estimators=100,200,300 max_depth=10,15,20"
+```
+
+### 2. **Open This Notebook**
+- Results are automatically cached and available for analysis
+- The notebook will detect available models and show them in the first section
+
+### 3. **Select Model for Analysis**
+- Copy the exact model name from the available models list
+- Paste it into the `model_name_to_analyze` variable above
+- Or modify the input prompt to select interactively
+
+### 4. **Explore Results**
+- The notebook provides comprehensive analysis including:
+  - Performance metrics and confusion matrix
+  - Feature importance (for tree-based models)
+  - Parameter search analysis and interactions
+  - Classifier-specific insights
+  - Multi-model comparisons
+
+### 5. **Iterate and Improve**
+- Use insights from analysis to guide next hyperparameter search
+- Create custom parameter value ranges focusing on promising regions
+- Use mixed approach: custom values for critical parameters, defaults for exploration
+- Try different classifiers based on performance comparison
+- Example iteration workflow:
+  1. Start with default ranges to understand parameter landscape
+  2. Identify best-performing regions from analysis
+  3. Create focused custom ranges around promising values
+  4. Fine-tune with narrow custom parameter ranges
+
+## Tips for Better Analysis
+
+1. **Run Multiple Searches**: Compare different parameter combinations and custom value ranges
+2. **Document Findings**: Add markdown cells with your observations about parameter impacts
+3. **Save Visualizations**: Export plots for reports or presentations
+4. **Focus on Metrics**: Choose the right evaluation metric for your problem
+5. **Consider Overfitting**: Check training vs validation performance gaps
+6. **Custom Parameter Strategy**: Start broad with defaults, then focus with custom ranges
+7. **Parameter Value Documentation**: Record successful custom parameter combinations for future use
+8. **Comparative Analysis**: Compare models with custom vs default parameter ranges
+
+---
+
+**Next Steps:**
+- Run additional hyperparameter searches with different parameter combinations
+- Experiment with custom parameter value ranges based on analysis insights
+- Try different classifiers (Decision Tree → Random Forest → XGBoost)
+- Use mixed custom/default parameter strategies for efficient exploration
+- Use insights to guide feature engineering or data preprocessing
+- Deploy the best model for your use case
+- Document successful parameter value combinations for future projects
+
+This analysis framework scales with your hyperparameter search experiments!

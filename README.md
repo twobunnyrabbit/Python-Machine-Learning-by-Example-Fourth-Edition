@@ -21,7 +21,7 @@ Datasets are stored externally and accessed via a global configuration system us
    MOVIELENS_PATH=${DATA_ROOT}/ch02/ml-1m
    CLICK_RATE_PATH=${DATA_ROOT}/ch03
    ```
-3. **Install dependencies** including python-dotenv:
+3. **Install dependencies** including python-dotenv and xgboost:
    ```bash
    uv sync
    ```
@@ -81,7 +81,9 @@ df = pd.read_csv(data_path)
 
 **Multiprocessing Warnings in GridSearchCV/RandomizedSearchCV:**
 
-If you encounter multiprocessing warnings when using `GridSearchCV` or `RandomizedSearchCV` in Quarto documents, add this code before your grid search:
+**For the Flexible Hyperparameter Search Script:** The script now automatically handles multiprocessing warnings on macOS. No user action needed!
+
+**For Interactive Environments (Quarto/Jupyter):** If you encounter multiprocessing warnings, add this code before your grid search:
 
 ```python
 # Fix for multiprocessing warnings in interactive environments (Quarto/Jupyter)
@@ -247,17 +249,20 @@ cached_model = cache.load_search_result("decision_tree_comprehensive_grid", para
 ## Repository Structure
 
 ```
-├── config.py                          # Global dataset configuration
-├── model_cache.py                     # Caching utility for expensive operations
-├── .env                              # Local dataset paths (not committed)
-├── ch2/                              # Naive Bayes examples
-├── ch3/                              # Decision Trees with caching examples
-│   ├── decision-tree-exercise.qmd           # Interactive development
+├── config.py                               # Global dataset configuration
+├── model_cache.py                          # Caching utility for expensive operations
+├── flexible_hyperparameter_search.py       # NEW: Flexible multi-classifier tuning
+├── analyze_flexible_search_results.qmd     # NEW: Analysis for flexible searches
+├── FLEXIBLE_SEARCH_GUIDE.md               # NEW: Comprehensive usage guide
+├── .env                                   # Local dataset paths (not committed)
+├── ch2/                                   # Naive Bayes examples
+├── ch3/                                   # Decision Trees with caching examples
+│   ├── decision-tree-exercise.qmd              # Interactive development
 │   ├── decision-tree-with-caching-example.qmd  # Caching demonstration
-│   ├── hyperparameter_search.py            # Production hyperparameter search
-│   └── analyze_search_results.qmd          # Results analysis
-├── data/                             # Local datasets (gitignored)
-└── model_cache/                      # Cached models (gitignored)
+│   ├── hyperparameter_search.py               # Production hyperparameter search
+│   └── analyze_search_results.qmd             # Results analysis
+├── data/                                  # Local datasets (gitignored)
+└── model_cache/                           # Cached models (gitignored)
 ```
 
 ## Key Features Summary
@@ -267,5 +272,84 @@ cached_model = cache.load_search_result("decision_tree_comprehensive_grid", para
 ✅ **Model Caching System** - Save expensive GridSearchCV/RandomizedSearchCV results  
 ✅ **Production-Ready Scripts** - Full multiprocessing support for expensive operations  
 ✅ **Comprehensive Examples** - Working code for all common scenarios  
+
+## Flexible Hyperparameter Search
+
+**NEW: Advanced hyperparameter tuning for multiple classifiers with custom parameter selection**
+
+### Quick Start
+```bash
+# Decision Tree with default parameter ranges
+python flexible_hyperparameter_search.py \
+    --classifier decision_tree \
+    --dataset click-rate-train.csv \
+    --target click \
+    --drop id,hour,device_id,device_ip \
+    --tune-params max_depth,criterion
+
+# Random Forest with custom parameter values (JSON format)
+python flexible_hyperparameter_search.py \
+    --classifier random_forest \
+    --dataset my_data.csv \
+    --target outcome \
+    --tune-params n_estimators,max_depth \
+    --param-values '{"n_estimators": [100, 200, 300], "max_depth": [10, 15, 20]}'
+
+# XGBoost with custom values (key-value format)
+python flexible_hyperparameter_search.py \
+    --classifier xgboost \
+    --dataset my_data.csv \
+    --target outcome \
+    --tune-params learning_rate,reg_alpha \
+    --param-values "learning_rate=0.05,0.1,0.15 reg_alpha=0,0.5,1.0"
+```
+
+### Key Features
+- ✅ **3 Classifiers Supported**: DecisionTree, RandomForest, XGBoost
+- ✅ **User-Selected Parameters**: Only tune what you specify (no forced defaults)
+- ✅ **Custom Parameter Values**: Specify your own ranges or use built-in defaults
+- ✅ **Flexible Dataset Support**: Any CSV with configurable target/drop columns
+- ✅ **Smart Caching**: Compatible with existing analysis tools
+- ✅ **Comprehensive Help**: Built-in parameter reference and examples
+
+### Getting Help
+```bash
+# Show all available parameters for any classifier
+python flexible_hyperparameter_search.py --help-params decision_tree
+python flexible_hyperparameter_search.py --help-params random_forest  
+python flexible_hyperparameter_search.py --help-params xgboost
+
+# Show usage examples (including custom parameter formats)
+python flexible_hyperparameter_search.py --examples
+```
+
+### Custom Parameter Values
+
+The script supports custom parameter value ranges in two formats:
+
+**JSON Format:**
+```bash
+--param-values '{"max_depth": [5, 10, 15], "criterion": ["gini", "entropy"]}'
+```
+
+**Key-Value Format:**
+```bash
+--param-values "max_depth=5,10,15 criterion=gini,entropy"
+```
+
+**Mixed Usage (Custom + Default):**
+```bash
+# Custom learning_rate values, default ranges for reg_alpha and n_estimators
+python flexible_hyperparameter_search.py \
+    --classifier xgboost \
+    --dataset my_data.csv \
+    --target outcome \
+    --tune-params learning_rate,reg_alpha,n_estimators \
+    --param-values '{"learning_rate": [0.05, 0.1, 0.15]}'
+```
+
+### Analysis Tools
+- **`analyze_flexible_search_results.qmd`** - Comprehensive analysis of any cached search
+- **`FLEXIBLE_SEARCH_GUIDE.md`** - Complete guide with examples, custom parameter usage, and best practices
 
 **Note:** The `.env` file is not committed to the repository for security and portability reasons.

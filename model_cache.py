@@ -46,7 +46,7 @@ class ModelCache:
         """Get the metadata file path for a model."""
         return self.cache_dir / f"{model_name}_{params_hash}_meta.json"
     
-    def save_search_result(self, model_name, search_object, params_dict, data_hash=None):
+    def save_search_result(self, model_name, search_object, params_dict, data_hash=None, additional_metrics=None):
         """
         Save a GridSearchCV or RandomizedSearchCV result to cache.
         
@@ -55,6 +55,7 @@ class ModelCache:
             search_object: Fitted GridSearchCV or RandomizedSearchCV object
             params_dict (dict): Dictionary of all parameters that affect the result
             data_hash (str, optional): Hash of the training data to detect data changes
+            additional_metrics (dict, optional): Additional metrics and metadata to store
         """
         params_hash = self._hash_params(params_dict)
         cache_path = self._get_cache_path(model_name, params_hash)
@@ -73,6 +74,10 @@ class ModelCache:
             'best_params': search_object.best_params_,
             'best_score': search_object.best_score_
         }
+        
+        # Add additional metrics if provided
+        if additional_metrics:
+            metadata.update(additional_metrics)
         
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
@@ -206,7 +211,7 @@ def hash_data(X, y):
 
 # Convenience function for easy usage
 def cached_grid_search(estimator, param_grid, X_train, y_train, model_name, 
-                      cv=5, scoring='accuracy', n_jobs=1, cache_dir="model_cache", **kwargs):
+                      cv=5, scoring='accuracy', n_jobs=1, cache_dir="model_cache", additional_metrics=None, **kwargs):
     """
     Perform GridSearchCV with automatic caching.
     
@@ -217,6 +222,7 @@ def cached_grid_search(estimator, param_grid, X_train, y_train, model_name,
         model_name: Unique name for this model configuration
         cv, scoring, n_jobs: GridSearchCV parameters
         cache_dir: Directory for cache storage
+        additional_metrics: Additional metrics and metadata to store
         **kwargs: Additional GridSearchCV parameters
     
     Returns:
@@ -259,6 +265,6 @@ def cached_grid_search(estimator, param_grid, X_train, y_train, model_name,
     grid_search.fit(X_train, y_train)
     
     # Save to cache
-    cache.save_search_result(model_name, grid_search, params_dict, data_hash)
+    cache.save_search_result(model_name, grid_search, params_dict, data_hash, additional_metrics)
     
     return grid_search
