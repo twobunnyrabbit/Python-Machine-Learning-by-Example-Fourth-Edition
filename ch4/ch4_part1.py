@@ -54,7 +54,8 @@ df = pd.DataFrame({'score': ['low',
 print(df)
 
 mapping = {'low':1, 'medium':2, 'high':3}
-df['score'] = df['score'].replace(mapping)
+df['score'] = df['score'].replace(mapping).infer_objects(copy=False)
+# <positron-console-cell-20>:1: FutureWarning: Downcasting behavior in `replace` is deprecated and will be removed in a future version. To retain the old behavior, explicitly call `result.infer_objects(copy=False)`. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
 
 print(df)
 
@@ -73,6 +74,7 @@ def sigmoid(input):
 
 z = np.linspace(-8, 8, 1000)
 y = sigmoid(z)
+plt.figure()  # Create a new figure
 plt.plot(z, y)
 plt.axhline(y=0, ls='dotted', color='k')
 plt.axhline(y=0.5, ls='dotted', color='k')
@@ -88,6 +90,7 @@ plt.show()
 # plot sample cost vs y_hat (prediction), for y (truth) = 1
 y_hat = np.linspace(0.001, 0.999, 1000)
 cost = -np.log(y_hat)
+plt.figure()  # Create a new figure
 plt.plot(y_hat, cost)
 plt.xlabel('Prediction')
 plt.ylabel('Cost')
@@ -99,6 +102,7 @@ plt.show()
 # plot sample cost vs y_hat (prediction), for y (truth) = 0
 y_hat = np.linspace(0.001, 0.999, 1000)
 cost = -np.log(1 - y_hat)
+plt.figure()  # Create a new figure
 plt.plot(y_hat, cost)
 plt.xlabel('Prediction')
 plt.ylabel('Cost')
@@ -206,6 +210,7 @@ predictions = predict(X_test, weights)
 print(predictions)
 
 
+plt.figure()  # Create a new figure
 plt.scatter(X_train[:5,0], X_train[:5,1], c='b', marker='x')
 plt.scatter(X_train[5:,0], X_train[5:,1], c='k', marker='.')
 for i, prediction in enumerate(predictions):
@@ -217,9 +222,16 @@ plt.show()
 
 # ## Predicting ad click-through with logistic regression using gradient descent 
 
+import sys
+from pathlib import Path
+sys.path.append(str(Path.cwd().parent))
+from config import get_data_path
+
+data_path = get_data_path(3, "click-rate-train.csv")
+
 import pandas as pd
 n_rows = 300000
-df = pd.read_csv("train.csv", nrows=n_rows)
+df = pd.read_csv(data_path, nrows=n_rows)
 
 X = df.drop(['click', 'id', 'hour', 'device_id', 'device_ip'], axis=1).values
 Y = df['click'].values
@@ -358,4 +370,3 @@ print('10 most important features are:\n', feature_names[top_10])
 # Readers may ignore the next cell.
 
 get_ipython().system('jupyter nbconvert --to python ch4_part1.ipynb --TemplateExporter.exclude_input_prompt=True')
-
