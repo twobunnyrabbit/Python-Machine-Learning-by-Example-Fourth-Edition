@@ -6,11 +6,12 @@ readme = "README.md"
 requires-python = ">=3.10.17"
 dependencies = [
     "akde>=1.0.2",
+    "altair>=5.5.0",
     "jinja2>=3.1.6",
     "jsonschema2md>=1.5.2",
     "kaggle>=1.7.4.2",
     "kagglehub>=0.3.11",
-    "marimo>=0.17.0",
+    "marimo[lsp,mcp]>=0.17.0",
     "matplotlib>=3.10.1",
     "numpy>=2.2.4",
     "openpyxl>=3.1.5",
